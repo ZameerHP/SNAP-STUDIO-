@@ -1,0 +1,212 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" // Can be switched to "postgresql" for Supabase
+  url      = env("DATABASE_URL")
+}
+
+// Staff / Director Auth
+model User {
+  id             String   @id @default(cuid())
+  email          String   @unique
+  hashedPassword String
+  name           String?
+  role           String   @default("DIRECTOR") // "DIRECTOR", "PRODUCER", "ADMIN", "CLIENT"
+  phone          String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+// Clients (Super Snap Ops spec)
+model Client {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  phone     String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  bookings    Booking[]
+  invoices    Invoice[]
+  contracts   Contract[]
+  galleries   Gallery[]
+  livestreams Livestream[]
+
+  @@map("clients")
+}
+
+// Inquiries / Leads (Super Snap Ops spec)
+model Inquiry {
+  id          String   @id @default(cuid())
+  name        String
+  email       String
+  phone       String?
+  serviceType String?  @map("service_type") // e.g. "Commercial Photography"
+  message     String?
+  budget      String?
+  location    String?
+  date        String?
+  status      String   @default("new") // new | contacted | booked | closed
+  adminNotes  String?  @map("admin_notes")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("inquiries")
+}
+
+// Services & Pricing (Super Snap Ops spec)
+model Service {
+  id            String    @id @default(cuid())
+  category      String    // Portrait & Family, Business & Real Estate, etc.
+  name          String
+  startingPrice Float     @map("starting_price")
+  description   String?
+  active        Boolean   @default(true)
+  sortOrder     Int       @default(0) @map("sort_order")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  bookings      Booking[]
+  packages      Package[]
+
+  @@map("services")
+}
+
+model Package {
+  id          String   @id @default(cuid())
+  serviceId   String   @map("service_id")
+  service     Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  name        String
+  description String
+  price       String
+  duration    String?
+  features    String?  // JSON stringified array of features
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("packages")
+}
+
+// Bookings / Shoots (Super Snap Ops spec)
+model Booking {
+  id          String    @id @default(cuid())
+  clientId    String    @map("client_id")
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  serviceId   String?   @map("service_id")
+  service     Service?  @relation(fields: [serviceId], references: [id])
+  scheduledAt DateTime  @default(now()) @map("scheduled_at")
+  location    String?
+  status      String    @default("scheduled") // scheduled | in_progress | completed | cancelled
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  invoices    Invoice[]
+  contracts   Contract[]
+  galleries   Gallery[]
+  livestreams Livestream[]
+
+  @@map("bookings")
+}
+
+// Invoices & Billing (Super Snap Ops spec)
+model Invoice {
+  id              String   @id @default(cuid())
+  clientId        String   @map("client_id")
+  client          Client   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bookingId       String?  @map("booking_id")
+  booking         Booking? @relation(fields: [bookingId], references: [id])
+  amount          Float
+  title           String?  @default("Studio Production Retainer")
+  lineItems       String?  @map("line_items") // JSON line items
+  squareInvoiceId String?  @map("square_invoice_id") // ID returned by Square Invoices API
+  squarePaymentId String?  @map("square_payment_id") // Populated once paid
+  status          String   @default("draft") // draft | sent | paid | overdue | cancelled
+  dueDate         DateTime? @map("due_date")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("invoices")
+}
+
+// Contracts & E-Sign (Super Snap Ops spec)
+model Contract {
+  id         String    @id @default(cuid())
+  clientId   String    @map("client_id")
+  client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bookingId  String?   @map("booking_id")
+  booking    Booking?  @relation(fields: [bookingId], references: [id])
+  title      String?   @default("Production Service Agreement")
+  content    String?   // Agreement text terms
+  fileUrl    String?   @map("file_url") // Supabase Storage or direct link
+  signed     Boolean   @default(false)
+  signedAt   DateTime? @map("signed_at")
+  signerName String?   @map("signer_name")
+  signerIp   String?   @map("signer_ip")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@map("contracts")
+}
+
+// Client Proofing Vaults (Super Snap Ops spec)
+model Gallery {
+  id         String         @id @default(cuid())
+  clientId   String         @map("client_id")
+  client     Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bookingId  String?        @map("booking_id")
+  booking    Booking?       @relation(fields: [bookingId], references: [id])
+  title      String?
+  accessCode String?        @map("access_code") // Simple shareable access code
+  createdAt  DateTime       @default(now()) @map("created_at")
+
+  assets     GalleryAsset[]
+
+  @@map("galleries")
+}
+
+model GalleryAsset {
+  id        String   @id @default(cuid())
+  galleryId String   @map("gallery_id")
+  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  fileUrl   String   @map("file_url")
+  fileType  String?  @default("image") @map("file_type") // image | video
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("gallery_assets")
+}
+
+// Livestream Broadcast Links (Super Snap Ops spec)
+model Livestream {
+  id          String    @id @default(cuid())
+  clientId    String    @map("client_id")
+  client      Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bookingId   String?   @map("booking_id")
+  booking     Booking?  @relation(fields: [bookingId], references: [id])
+  streamUrl   String    @map("stream_url")
+  isLive      Boolean   @default(false) @map("is_live")
+  scheduledAt DateTime? @map("scheduled_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("livestreams")
+}
+
+// Curated Portfolio Showcase
+model PortfolioItem {
+  id           String   @id @default(cuid())
+  title        String
+  type         String
+  category     String
+  client       String?
+  year         String?
+  image        String
+  camera       String?
+  lens         String?
+  lighting     String?
+  brief        String?
+  deliverables String?
+  stats        String?
+  sortOrder    Int      @default(0) @map("sort_order")
+  isPublished  Boolean  @default(true) @map("is_published")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("portfolio_items")
+}
