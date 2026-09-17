@@ -1,4 +1,3 @@
-import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { SmoothScrollProvider } from '@/components/smooth-scroll-provider'
@@ -45,7 +44,6 @@ export default function RootLayout({
         <SmoothScrollProvider>
           {children}
         </SmoothScrollProvider>
-        {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
     </html>
   )

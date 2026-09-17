@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite" // Can be switched to "postgresql" for Supabase
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 

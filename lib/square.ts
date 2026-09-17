@@ -1,13 +1,22 @@
-import { Client, Environment } from 'square'
 import crypto from 'crypto'
 
-const isProduction = process.env.SQUARE_ENVIRONMENT === 'production'
-
-// Official Square Node SDK Client
-export const squareClient = new Client({
-  environment: isProduction ? Environment.Production : Environment.Sandbox,
-  accessToken: process.env.SQUARE_ACCESS_TOKEN || '',
-})
+// Mocked Square Client
+export const squareClient = {
+  customersApi: {
+    searchCustomers: async () => ({ result: { customers: [] } }),
+    createCustomer: async () => ({ result: { customer: { id: `sim_cust_${Date.now()}` } } })
+  },
+  ordersApi: {
+    createOrder: async () => ({ result: { order: { id: `sim_order_${Date.now()}` } } })
+  },
+  invoicesApi: {
+    createInvoice: async () => ({ result: { invoice: { id: `sim_inv_${Date.now()}` } } }),
+    publishInvoice: async () => ({ result: { invoice: { publicUrl: '/portal/payments/simulate' } } })
+  },
+  checkoutApi: {
+    createPaymentLink: async () => ({ result: { paymentLink: { url: '/portal/payments/simulate' } } })
+  }
+} as any
 
 export interface CreateSquareCustomerParams {
   name: string
