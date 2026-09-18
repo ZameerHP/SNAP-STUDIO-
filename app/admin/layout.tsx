@@ -14,11 +14,21 @@ export default function AdminLayout({
   const [adminEmail, setAdminEmail] = React.useState('supersnapstudio@gmail.com')
 
   React.useEffect(() => {
+    try {
+      const stored = localStorage.getItem('super_snap_auth_email')
+      if (stored) {
+        setAdminEmail(stored)
+      }
+    } catch {}
+
     fetch('/api/auth/session')
       .then((res) => res.json())
       .then((data) => {
         if (data?.user?.email) {
           setAdminEmail(data.user.email)
+          try {
+            localStorage.setItem('super_snap_auth_email', data.user.email)
+          } catch {}
         }
       })
       .catch(() => {})

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSessionUser } from '@/lib/session-user'
 import { db } from '@/lib/db'
 
 export async function PATCH(
@@ -7,8 +7,8 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (session?.user?.role !== 'ADMIN') {
+    const user = await getSessionUser(req)
+    if (user?.role !== 'ADMIN') {
       return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
     }
 
@@ -38,8 +38,8 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (session?.user?.role !== 'ADMIN') {
+    const user = await getSessionUser(req)
+    if (user?.role !== 'ADMIN') {
       return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
     }
 

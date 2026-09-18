@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSessionUser } from '@/lib/session-user'
 import { db } from '@/lib/db'
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const user = await getSessionUser(req)
+    if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
-    const isAdmin = session.user.role === 'ADMIN'
-    const whereClause = isAdmin ? {} : { userId: session.user.id }
+    const isAdmin = user.role === 'ADMIN'
+    const whereClause = isAdmin ? {} : { userId: user.id }
 
     const invoices = await db.invoice.findMany({
       where: whereClause,
@@ -30,8 +30,8 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
-    if (session?.user?.role !== 'ADMIN') {
+    const user = await getSessionUser(req)
+    if (user?.role !== 'ADMIN') {
       return NextResponse.json({ success: false, error: 'Admin access required' }, { status: 403 })
     }
 

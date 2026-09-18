@@ -95,6 +95,26 @@ export default function PortalLayout({
             </span>
           </div>
 
+          <div style={{ padding: '4px 0' }}>
+            <Link href="/admin" style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              padding: '6px 8px',
+              background: 'rgba(215, 255, 63, 0.08)',
+              border: '1px solid rgba(215, 255, 63, 0.25)',
+              borderRadius: '4px',
+              color: '#D7FF3F',
+              fontSize: '10px',
+              fontFamily: 'ui-monospace, monospace',
+              textDecoration: 'none',
+              fontWeight: 700,
+            }}>
+              <span>★ Switch to Owner Console</span>
+              <span>↗</span>
+            </Link>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Link href="/" style={{
               fontSize: '10px',

@@ -3,7 +3,6 @@
 import React, { FormEvent, useState, useRef, useEffect } from 'react'
 import { useAnimations } from '@/hooks/use-animations'
 import { useSmoothScroll } from '@/components/smooth-scroll-provider'
-import StudioCalendar from './studio-calendar'
 
 interface ProjectCaseStudy {
   id: string
@@ -357,9 +356,8 @@ export function SuperSnapHome() {
       phone: (formData.get('phone') as string) || '',
       service: selectedService,
       budget: selectedBudget,
-      location: (formData.get('location') as string) || sessionLocation,
+      location: sessionLocation,
       date: (formData.get('date') as string) || '',
-      timeSlot: (formData.get('timeSlot') as string) || '',
       message: formData.get('message') as string,
     }
 
@@ -441,6 +439,7 @@ export function SuperSnapHome() {
             <a href="#reviews" onClick={(e) => handleAnchorClick(e, '#reviews')}>Standards</a>
             <a href="#faq" onClick={(e) => handleAnchorClick(e, '#faq')}>FAQ</a>
             <a href="/portal" style={{ color: 'var(--lime)' }}>Client Portal</a>
+            <a href="/admin" style={{ color: 'var(--lime)', border: '1px solid rgba(215, 255, 63, 0.4)', padding: '4px 10px', borderRadius: '4px' }}>Owner Portal ⚡</a>
             <a href="#contact" onClick={(e) => handleAnchorClick(e, '#contact')} className="nav-highlight">Book Session ↗</a>
           </nav>
           <button className="menu-button" onClick={() => setMenuOpen(!menuOpen)} aria-expanded={menuOpen} aria-controls="mobile-menu">
@@ -459,6 +458,7 @@ export function SuperSnapHome() {
           <a href="#reviews" onClick={(e) => { handleAnchorClick(e, '#reviews'); setMenuOpen(false) }}>Studio Standards</a>
           <a href="#faq" onClick={(e) => { handleAnchorClick(e, '#faq'); setMenuOpen(false) }}>Studio FAQ</a>
           <a href="/portal" style={{ color: 'var(--lime)' }} onClick={() => setMenuOpen(false)}>Client Portal ↗</a>
+          <a href="/admin" style={{ color: 'var(--lime)', fontWeight: 700 }} onClick={() => setMenuOpen(false)}>Owner Dashboard (Studio Ops) ⚡</a>
           <a href="#contact" onClick={(e) => { handleAnchorClick(e, '#contact'); setMenuOpen(false) }}>Book Session ↗</a>
         </nav>
       )}
@@ -1177,20 +1177,11 @@ export function SuperSnapHome() {
                 Main Office: London, Ontario, Canada<br />
                 Serving London, throughout Ontario & all of Canada
               </address>
-              <div style={{
-                marginTop: '16px',
-                padding: '12px 14px',
-                background: 'rgba(215, 255, 63, 0.08)',
-                border: '1px solid rgba(215, 255, 63, 0.25)',
-                borderRadius: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-              }}>
-                <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#D7FF3F', boxShadow: '0 0 8px #D7FF3F', flexShrink: 0 }} />
-                <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '11px', color: '#D7FF3F', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                  Studio & On-Location Shoots Available 7 Days a Week
-                </span>
+              <div className="studio-hours">
+                <strong>Studio Hours:</strong>
+                <span>Mon — Fri: 8:30 AM — 7:30 PM</span>
+                <span>Saturday: 9:00 AM — 6:00 PM</span>
+                <span>Sunday: By Production Appointment</span>
               </div>
             </div>
 
@@ -1247,13 +1238,10 @@ export function SuperSnapHome() {
                 <input type="tel" name="phone" placeholder="(647) 000-0000" />
               </label>
               <label>
-                Shoot Location / City
-                <input name="location" placeholder="e.g. London studio, Toronto, or on-site" />
+                Preferred Production Date
+                <input type="date" name="date" />
               </label>
             </div>
-
-            {/* High-Contrast Interactive Studio Calendar & Time Slot Selector */}
-            <StudioCalendar />
 
             <div className="form-budget-selector">
               <label className="field-heading">Estimated Budget / Tier</label>
@@ -1336,7 +1324,9 @@ export function SuperSnapHome() {
             <span className="footer-tagline">EVERY FRAME, ALIVE.</span>
           </div>
           <div className="footer-col-right">
-            <span>LONDON, ON • SERVING ALL OF CANADA</span>
+            <a href="/admin" style={{ color: 'var(--lime)', textDecoration: 'none' }}>Owner Console ⚡</a>
+            <span className="footer-dot">•</span>
+            <a href="/portal" style={{ color: '#F4F1E9', textDecoration: 'none' }}>Client Vault</a>
             <span className="footer-dot">•</span>
             <a href="#hero-title" onClick={(e) => handleAnchorClick(e, '#hero-title')}>Back to top ↑</a>
           </div>

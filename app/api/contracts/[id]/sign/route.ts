@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSessionUser } from '@/lib/session-user'
 import { db } from '@/lib/db'
 
 export async function POST(
@@ -7,8 +7,8 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await auth()
-    if (!session?.user?.id) {
+    const user = await getSessionUser(req)
+    if (!user?.id) {
       return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -23,12 +23,12 @@ export async function POST(
       )
     }
 
-    // Verify contract belongs to client
+    // Verify contract belongs to client or admin
     const contract = await db.contract.findUnique({
       where: { id },
     })
 
-    if (!contract || contract.userId !== session.user.id) {
+    if (!contract || (user.role !== 'ADMIN' && contract.userId !== user.id)) {
       return NextResponse.json(
         { success: false, error: 'Contract not found or access denied' },
         { status: 404 }
@@ -43,7 +43,7 @@ export async function POST(
       db.signature.create({
         data: {
           contractId: id,
-          userId: session.user.id,
+          userId: user.id,
           fullName: fullName.trim(),
           ipAddress,
           userAgent,

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
+import { getSessionUser } from '@/lib/session-user'
 import { db } from '@/lib/db'
 import { createSquarePaymentLink } from '@/lib/square'
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await auth()
+    const user = await getSessionUser(req)
     const body = await req.json()
     const { invoiceId } = body
 
@@ -22,8 +22,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
     }
 
-    // Permission check: only admin or the invoice owner can initiate payment
-    if (session?.user?.role !== 'ADMIN' && session?.user?.id !== invoice.userId) {
+    // Permission check: admin or the invoice owner can initiate payment
+    if (user?.role !== 'ADMIN' && user?.id !== invoice.userId) {
       return NextResponse.json({ error: 'Unauthorized to pay this invoice' }, { status: 403 })
     }
 

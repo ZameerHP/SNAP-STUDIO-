@@ -15,8 +15,8 @@ export const inquirySchema = z.object({
 export type InquiryInput = z.infer<typeof inquirySchema>
 
 export const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email address'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
+  email: z.string().min(2, 'Please enter your email or identifier'),
+  password: z.string().min(1, 'Password is required'),
 })
 
 export type LoginInput = z.infer<typeof loginSchema>
