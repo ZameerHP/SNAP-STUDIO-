@@ -39,6 +39,7 @@ export default function AdminLayout({
     { label: 'Inquiries & Leads', href: '/admin/inquiries', icon: '✉' },
     { label: 'Services & Pricing', href: '/admin/services', icon: '🏷' },
     { label: 'Bookings & Shoots', href: '/admin/bookings', icon: '📅' },
+    { label: 'Availability & Hours', href: '/admin/availability', icon: '⏰' },
     { label: 'Invoices & Billing', href: '/admin/invoices', icon: '📄' },
     { label: 'Contracts & E-Sign', href: '/admin/contracts', icon: '✒' },
     { label: 'Client Proofing Vaults', href: '/admin/galleries', icon: '🖼' },

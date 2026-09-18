@@ -16,6 +16,7 @@ interface Gallery {
   title: string
   description: string | null
   accessCode: string | null
+  downloadsEnabled?: boolean
   media: MediaItem[]
 }
 
@@ -23,14 +24,39 @@ export default function ClientGalleryPage() {
   const [galleries, setGalleries] = useState<Gallery[]>([])
   const [loading, setLoading] = useState(true)
   const [favoriteFrames, setFavoriteFrames] = useState<string[]>([])
+  const [retouchNotes, setRetouchNotes] = useState<Record<string, string>>({})
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [tempNoteText, setTempNoteText] = useState('')
   const [activePreview, setActivePreview] = useState<MediaItem | null>(null)
+  const [savingNote, setSavingNote] = useState(false)
 
   async function loadGalleries() {
     try {
       const res = await fetch('/api/galleries')
       const data = await res.json()
-      if (data.success) {
+      if (data.success && data.galleries) {
         setGalleries(data.galleries)
+
+        // Load favorites and retouch notes for each gallery from real Supabase DB
+        for (const gal of data.galleries) {
+          try {
+            const [favRes, noteRes] = await Promise.all([
+              fetch(`/api/galleries/${gal.id}/favorites`),
+              fetch(`/api/galleries/${gal.id}/notes`),
+            ])
+            const favData = await favRes.json()
+            const noteData = await noteRes.json()
+
+            if (favData.success && Array.isArray(favData.favorites)) {
+              setFavoriteFrames((prev) => Array.from(new Set([...prev, ...favData.favorites])))
+            }
+            if (noteData.success && noteData.notes) {
+              setRetouchNotes((prev) => ({ ...prev, ...noteData.notes }))
+            }
+          } catch (e) {
+            console.error('Failed to load gallery metadata', e)
+          }
+        }
       }
     } catch (e) {
       console.error(e)
@@ -43,25 +69,68 @@ export default function ClientGalleryPage() {
     loadGalleries()
   }, [])
 
-  function toggleFavorite(id: string) {
+  async function toggleFavorite(galleryId: string, photoId: string) {
+    // Optimistic update
+    const isFav = favoriteFrames.includes(photoId)
     setFavoriteFrames((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+      isFav ? prev.filter((id) => id !== photoId) : [...prev, photoId]
     )
+
+    try {
+      const res = await fetch(`/api/galleries/${galleryId}/favorites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photoId }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        if (data.favorited) {
+          setFavoriteFrames((prev) => Array.from(new Set([...prev, photoId])))
+        } else {
+          setFavoriteFrames((prev) => prev.filter((id) => id !== photoId))
+        }
+      }
+    } catch (e) {
+      console.error('Favorite persistence error', e)
+    }
+  }
+
+  async function saveRetouchNote(galleryId: string, photoId: string) {
+    setSavingNote(true)
+    try {
+      const res = await fetch(`/api/galleries/${galleryId}/notes`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ photoId, note: tempNoteText }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        setRetouchNotes((prev) => ({
+          ...prev,
+          [photoId]: tempNoteText.trim(),
+        }))
+        setEditingNoteId(null)
+      }
+    } catch (e) {
+      console.error('Save retouch note error', e)
+    } finally {
+      setSavingNote(false)
+    }
   }
 
   return (
     <div>
       {/* Header */}
-      <div style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <div style={{ marginBottom: '28px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '11px', color: '#D7FF3F', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
             VAULT ASSET DELIVERY
           </span>
-          <h1 style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-0.04em', margin: '4px 0 0 0' }}>
+          <h1 style={{ fontSize: '28px', fontWeight: 900, letterSpacing: '-0.04em', margin: '4px 0 0 0', color: '#F4F1E9' }}>
             Private Proofing & Deliverables Vault
           </h1>
           <p style={{ color: '#88907f', fontSize: '13px', margin: '6px 0 0 0' }}>
-            Full-resolution master plates, color-graded stills, and proof contact sheets scoped exclusively to your account.
+            Full-resolution master plates, color-graded stills, and proof contact sheets. Favorite frames and add retouching requests.
           </p>
         </div>
 
@@ -81,7 +150,7 @@ export default function ClientGalleryPage() {
 
       {loading ? (
         <p style={{ color: '#88907f', fontFamily: 'ui-monospace, monospace', fontSize: '12px' }}>
-          Decrypting personal media vault...
+          Decrypting personal media vault from database...
         </p>
       ) : galleries.length === 0 ? (
         <div style={{
@@ -91,7 +160,7 @@ export default function ClientGalleryPage() {
           padding: '40px',
           textAlign: 'center',
         }}>
-          <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px 0' }}>No Media Uploaded Yet</h3>
+          <h3 style={{ fontSize: '18px', fontWeight: 700, margin: '0 0 8px 0', color: '#F4F1E9' }}>No Media Uploaded Yet</h3>
           <p style={{ color: '#88907f', fontSize: '13px', margin: 0 }}>
             Following your production shoot, raw contact sheets and master retouched assets will be uploaded directly to this private space.
           </p>
@@ -108,9 +177,9 @@ export default function ClientGalleryPage() {
                 padding: '28px',
               }}
             >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
                 <div>
-                  <h2 style={{ fontSize: '22px', fontWeight: 900, margin: '0 0 4px 0' }}>{gal.title}</h2>
+                  <h2 style={{ fontSize: '22px', fontWeight: 900, margin: '0 0 4px 0', color: '#F4F1E9' }}>{gal.title}</h2>
                   {gal.description && <p style={{ fontSize: '13px', color: '#88907f', margin: 0 }}>{gal.description}</p>}
                 </div>
                 {gal.accessCode && (
@@ -132,6 +201,9 @@ export default function ClientGalleryPage() {
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '20px' }}>
                 {gal.media.map((item) => {
                   const isFav = favoriteFrames.includes(item.id)
+                  const note = retouchNotes[item.id]
+                  const isEditingNote = editingNoteId === item.id
+
                   return (
                     <div
                       key={item.id}
@@ -175,9 +247,98 @@ export default function ClientGalleryPage() {
                           {item.title || 'Master Production Frame'}
                         </span>
 
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '4px' }}>
+                        {/* Retouching Notes Display / Editor */}
+                        {note && !isEditingNote && (
+                          <div style={{
+                            backgroundColor: 'rgba(215, 255, 63, 0.05)',
+                            border: '1px dashed rgba(215, 255, 63, 0.3)',
+                            borderRadius: '4px',
+                            padding: '8px',
+                            fontSize: '11px',
+                            color: '#dedad0',
+                          }}>
+                            <span style={{ color: '#D7FF3F', fontWeight: 700, display: 'block', marginBottom: '2px', fontSize: '9px', textTransform: 'uppercase' }}>
+                              Retouch Request:
+                            </span>
+                            {note}
+                          </div>
+                        )}
+
+                        {isEditingNote ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <textarea
+                              value={tempNoteText}
+                              onChange={(e) => setTempNoteText(e.target.value)}
+                              placeholder="e.g. Remove glare on glasses, brighten background..."
+                              rows={2}
+                              style={{
+                                width: '100%',
+                                backgroundColor: '#191C16',
+                                border: '1px solid #D7FF3F',
+                                color: '#F4F1E9',
+                                fontSize: '11px',
+                                padding: '6px',
+                                borderRadius: '4px',
+                                resize: 'none',
+                              }}
+                            />
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button
+                                onClick={() => saveRetouchNote(gal.id, item.id)}
+                                disabled={savingNote}
+                                style={{
+                                  padding: '4px 10px',
+                                  backgroundColor: '#D7FF3F',
+                                  color: '#10110F',
+                                  border: 'none',
+                                  borderRadius: '3px',
+                                  fontSize: '10px',
+                                  fontWeight: 700,
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                {savingNote ? 'Saving...' : 'Save Note'}
+                              </button>
+                              <button
+                                onClick={() => setEditingNoteId(null)}
+                                style={{
+                                  padding: '4px 8px',
+                                  backgroundColor: 'transparent',
+                                  border: '1px solid rgba(244, 241, 233, 0.2)',
+                                  color: '#88907f',
+                                  borderRadius: '3px',
+                                  fontSize: '10px',
+                                  cursor: 'pointer',
+                                }}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
                           <button
-                            onClick={() => toggleFavorite(item.id)}
+                            onClick={() => {
+                              setEditingNoteId(item.id)
+                              setTempNoteText(note || '')
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#88907f',
+                              fontSize: '11px',
+                              textAlign: 'left',
+                              padding: 0,
+                              cursor: 'pointer',
+                              textDecoration: 'underline',
+                            }}
+                          >
+                            {note ? 'Edit Retouch Note' : '+ Add Retouch Note'}
+                          </button>
+                        )}
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '6px' }}>
+                          <button
+                            onClick={() => toggleFavorite(gal.id, item.id)}
                             style={{
                               padding: '6px 12px',
                               borderRadius: '4px',
@@ -246,24 +407,26 @@ export default function ClientGalleryPage() {
             <span style={{ color: '#F4F1E9', fontSize: '14px', fontWeight: 600 }}>
               {activePreview.title || 'Studio Master'}
             </span>
-            <a
-              href={activePreview.url}
-              download
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                padding: '6px 14px',
-                backgroundColor: '#D7FF3F',
-                color: '#10110F',
-                borderRadius: '4px',
-                fontFamily: 'ui-monospace, monospace',
-                fontSize: '11px',
-                fontWeight: 700,
-                textDecoration: 'none',
-              }}
-            >
-              Download Full Res ↗
-            </a>
+            {activePreview.isDownloadable && (
+              <a
+                href={activePreview.url}
+                download
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  padding: '6px 14px',
+                  backgroundColor: '#D7FF3F',
+                  color: '#10110F',
+                  borderRadius: '4px',
+                  fontFamily: 'ui-monospace, monospace',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  textDecoration: 'none',
+                }}
+              >
+                Download Full Res ↗
+              </a>
+            )}
             <button
               onClick={() => setActivePreview(null)}
               style={{

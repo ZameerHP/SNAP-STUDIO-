@@ -17,10 +17,17 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null)
   const [successNotice, setSuccessNotice] = useState<string | null>(null)
 
+  const [authMode, setAuthMode] = useState<'password' | 'otp'>('password')
+  const [otpCode, setOtpCode] = useState('')
+  const [otpSent, setOtpSent] = useState(false)
+  const [otpLoading, setOtpLoading] = useState(false)
+
   function switchTab(tab: 'owner' | 'client') {
     setActiveTab(tab)
     setError(null)
     setSuccessNotice(null)
+    setOtpSent(false)
+    setOtpCode('')
     if (tab === 'owner') {
       setEmail('supersnapstudio@gmail.com')
       setPassword('AdminPassword2026')
@@ -30,28 +37,71 @@ function LoginForm() {
     }
   }
 
-  async function directOwnerBypass() {
+  async function handleSendOtp() {
+    if (!email || !email.includes('@')) {
+      setError('Please provide a valid email address.')
+      return
+    }
+    setOtpLoading(true)
+    setError(null)
+    setSuccessNotice(null)
+    try {
+      const res = await fetch('/api/auth/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setOtpSent(true)
+        setSuccessNotice('6-digit security code dispatched to your email.')
+      } else {
+        setError(data.error || 'Failed to dispatch security code.')
+      }
+    } catch {
+      setError('Network error sending verification code.')
+    } finally {
+      setOtpLoading(false)
+    }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault()
+    if (!otpCode || otpCode.length < 6) {
+      setError('Please enter the full 6-digit code.')
+      return
+    }
     setLoading(true)
     setError(null)
-    setSuccessNotice('Authorizing Owner Dashboard Access...')
-    try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem('super_snap_auth_email', 'supersnapstudio@gmail.com')
-        localStorage.setItem('super_snap_auth_role', 'ADMIN')
-      }
-      // Attempt NextAuth session sign in in background
-      signIn('credentials', {
-        email: 'supersnapstudio@gmail.com',
-        password: 'AdminPassword2026',
-        redirect: false,
-      }).catch(() => {})
+    setSuccessNotice('Verifying one-time security code...')
 
-      // Instant direct navigation
-      setTimeout(() => {
-        window.location.href = callbackUrl.startsWith('/admin') ? callbackUrl : '/admin'
-      }, 250)
+    try {
+      const res = await fetch('/api/auth/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), code: otpCode.trim() }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('super_snap_auth_email', data.user.email)
+          localStorage.setItem('super_snap_auth_role', data.user.role)
+        }
+        setSuccessNotice('Identity verified successfully. Loading studio portal...')
+        const targetPath = data.user.role === 'ADMIN'
+          ? (callbackUrl.startsWith('/admin') ? callbackUrl : '/admin')
+          : (callbackUrl.startsWith('/portal') ? callbackUrl : '/portal')
+
+        setTimeout(() => {
+          window.location.href = targetPath
+        }, 300)
+      } else {
+        setError(data.error || 'Invalid or expired verification code.')
+        setLoading(false)
+      }
     } catch {
-      window.location.href = '/admin'
+      setError('Verification service error. Please try again.')
+      setLoading(false)
     }
   }
 
@@ -70,7 +120,6 @@ function LoginForm() {
       cleanEmail.toLowerCase().includes('supersnapstudio')
 
     try {
-      // Optimistically store in localStorage for reliable iframe session state
       if (typeof window !== 'undefined') {
         localStorage.setItem('super_snap_auth_email', cleanEmail)
         localStorage.setItem('super_snap_auth_role', isOwnerIntent ? 'ADMIN' : 'CLIENT')
@@ -83,15 +132,7 @@ function LoginForm() {
       })
 
       if (res?.error) {
-        // If credentials failed for standard reasons, but it's an owner email, allow direct fallback
-        if (isOwnerIntent) {
-          setSuccessNotice('Owner credentials recognized. Opening Studio Dashboard...')
-          setTimeout(() => {
-            window.location.href = '/admin'
-          }, 400)
-          return
-        }
-        setError('Invalid credentials. Please verify your email and password.')
+        setError('Invalid credentials. Please verify your email and password, or use Email Security Code.')
         setLoading(false)
         return
       }
@@ -104,13 +145,9 @@ function LoginForm() {
       setTimeout(() => {
         window.location.href = targetPath
       }, 300)
-    } catch (err: any) {
-      if (isOwnerIntent) {
-        window.location.href = '/admin'
-      } else {
-        setError('Authentication service error. Click below to bypass.')
-        setLoading(false)
-      }
+    } catch {
+      setError('Authentication error. Please try again or sign in with email OTP code.')
+      setLoading(false)
     }
   }
 
@@ -228,76 +265,47 @@ function LoginForm() {
         </button>
       </div>
 
-      {/* One-Click Instant Access for Owner */}
-      {activeTab === 'owner' && (
-        <div style={{
-          marginBottom: '20px',
-          padding: '14px',
-          background: 'rgba(215, 255, 63, 0.06)',
-          border: '1px solid rgba(215, 255, 63, 0.3)',
-          borderRadius: '6px',
-        }}>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: '8px',
-          }}>
-            <span style={{
-              fontFamily: 'ui-monospace, monospace',
-              fontSize: '10px',
-              fontWeight: 700,
-              color: '#D7FF3F',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-            }}>
-              ⚡ ONE-CLICK OWNER ACCESS
-            </span>
-            <span style={{
-              fontSize: '10px',
-              fontFamily: 'ui-monospace, monospace',
-              color: '#88907f',
-            }}>
-              Instant Bypass
-            </span>
-          </div>
-          <button
-            type="button"
-            onClick={directOwnerBypass}
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '12px 16px',
-              backgroundColor: '#D7FF3F',
-              color: '#10110F',
-              border: 'none',
-              borderRadius: '4px',
-              fontFamily: 'ui-monospace, monospace',
-              fontSize: '12px',
-              fontWeight: 800,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              cursor: loading ? 'wait' : 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              boxShadow: '0 4px 14px rgba(215, 255, 63, 0.25)',
-            }}
-          >
-            <span>Enter Studio Owner Dashboard ↗</span>
-          </button>
-          <span style={{
-            display: 'block',
-            textAlign: 'center',
+      {/* Auth Mode Toggle (Password vs Email Security Code) */}
+      <div style={{
+        display: 'flex',
+        gap: '8px',
+        marginBottom: '20px',
+      }}>
+        <button
+          type="button"
+          onClick={() => setAuthMode('password')}
+          style={{
+            flex: 1,
+            padding: '8px',
+            borderRadius: '4px',
+            border: authMode === 'password' ? '1px solid #D7FF3F' : '1px solid rgba(244, 241, 233, 0.12)',
+            backgroundColor: authMode === 'password' ? 'rgba(215, 255, 63, 0.08)' : 'transparent',
+            color: authMode === 'password' ? '#D7FF3F' : '#88907f',
             fontSize: '11px',
-            color: '#88907f',
-            marginTop: '8px',
-          }}>
-            Recognized Owner: <strong style={{ color: '#F4F1E9' }}>supersnapstudio@gmail.com</strong>
-          </span>
-        </div>
-      )}
+            fontFamily: 'ui-monospace, monospace',
+            cursor: 'pointer',
+          }}
+        >
+          Password Login
+        </button>
+        <button
+          type="button"
+          onClick={() => setAuthMode('otp')}
+          style={{
+            flex: 1,
+            padding: '8px',
+            borderRadius: '4px',
+            border: authMode === 'otp' ? '1px solid #D7FF3F' : '1px solid rgba(244, 241, 233, 0.12)',
+            backgroundColor: authMode === 'otp' ? 'rgba(215, 255, 63, 0.08)' : 'transparent',
+            color: authMode === 'otp' ? '#D7FF3F' : '#88907f',
+            fontSize: '11px',
+            fontFamily: 'ui-monospace, monospace',
+            cursor: 'pointer',
+          }}
+        >
+          Email Security Code (OTP)
+        </button>
+      </div>
 
       {/* Notifications */}
       {successNotice && (
@@ -330,109 +338,226 @@ function LoginForm() {
         </div>
       )}
 
-      {/* Standard Form */}
-      <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div>
-          <label style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontFamily: 'ui-monospace, monospace',
-            fontSize: '10px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            color: '#88907f',
-            marginBottom: '6px',
-          }}>
-            <span>Email Address or Username</span>
-            {activeTab === 'owner' && (
-              <span style={{ color: '#D7FF3F', fontSize: '9px' }}>Owner Account</span>
-            )}
-          </label>
-          <input
-            type="text"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder={activeTab === 'owner' ? 'supersnapstudio@gmail.com' : 'client@example.com'}
-            style={{
-              width: '100%',
-              height: '44px',
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(244, 241, 233, 0.18)',
-              borderRadius: '4px',
-              color: '#F4F1E9',
-              padding: '0 14px',
-              fontSize: '13px',
+      {authMode === 'password' ? (
+        /* Password Form */
+        <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               fontFamily: 'ui-monospace, monospace',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: '#88907f',
+              marginBottom: '6px',
+            }}>
+              <span>Email Address</span>
+              {activeTab === 'owner' && (
+                <span style={{ color: '#D7FF3F', fontSize: '9px' }}>Owner Account</span>
+              )}
+            </label>
+            <input
+              type="text"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={activeTab === 'owner' ? 'supersnapstudio@gmail.com' : 'client@example.com'}
+              style={{
+                width: '100%',
+                height: '44px',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(244, 241, 233, 0.18)',
+                borderRadius: '4px',
+                color: '#F4F1E9',
+                padding: '0 14px',
+                fontSize: '13px',
+                fontFamily: 'ui-monospace, monospace',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
 
-        <div>
-          <label style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            fontFamily: 'ui-monospace, monospace',
-            fontSize: '10px',
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            color: '#88907f',
-            marginBottom: '6px',
-          }}>
-            <span>Password</span>
-            <span style={{ color: '#88907f', fontSize: '9px' }}>
-              {activeTab === 'owner' ? 'Default: AdminPassword2026' : 'ClientPassword2026!'}
-            </span>
-          </label>
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••••••"
-            style={{
-              width: '100%',
-              height: '44px',
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(244, 241, 233, 0.18)',
-              borderRadius: '4px',
-              color: '#F4F1E9',
-              padding: '0 14px',
-              fontSize: '13px',
+          <div>
+            <label style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
               fontFamily: 'ui-monospace, monospace',
-              outline: 'none',
-              boxSizing: 'border-box',
-            }}
-          />
-        </div>
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: '#88907f',
+              marginBottom: '6px',
+            }}>
+              <span>Password</span>
+            </label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••••••"
+              style={{
+                width: '100%',
+                height: '44px',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(244, 241, 233, 0.18)',
+                borderRadius: '4px',
+                color: '#F4F1E9',
+                padding: '0 14px',
+                fontSize: '13px',
+                fontFamily: 'ui-monospace, monospace',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading}
-          style={{
-            height: '46px',
-            background: activeTab === 'owner' ? '#D7FF3F' : '#F4F1E9',
-            color: '#10110F',
-            border: 'none',
-            borderRadius: '4px',
-            fontFamily: 'ui-monospace, monospace',
-            fontSize: '11px',
-            fontWeight: 800,
-            textTransform: 'uppercase',
-            letterSpacing: '0.1em',
-            cursor: loading ? 'wait' : 'pointer',
-            opacity: loading ? 0.7 : 1,
-            marginTop: '4px',
-            transition: 'all 0.15s ease',
-          }}
-        >
-          {loading ? 'Authenticating...' : activeTab === 'owner' ? 'Sign In as Studio Owner ↗' : 'Sign In to Client Vault ↗'}
-        </button>
-      </form>
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              height: '46px',
+              background: activeTab === 'owner' ? '#D7FF3F' : '#F4F1E9',
+              color: '#10110F',
+              border: 'none',
+              borderRadius: '4px',
+              fontFamily: 'ui-monospace, monospace',
+              fontSize: '11px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              cursor: loading ? 'wait' : 'pointer',
+              opacity: loading ? 0.7 : 1,
+              marginTop: '4px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {loading ? 'Authenticating...' : activeTab === 'owner' ? 'Sign In as Studio Owner ↗' : 'Sign In to Client Vault ↗'}
+          </button>
+        </form>
+      ) : (
+        /* OTP Form */
+        <form onSubmit={handleVerifyOtp} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              fontFamily: 'ui-monospace, monospace',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: '#88907f',
+              marginBottom: '6px',
+            }}>
+              <span>Email Address</span>
+            </label>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your.email@example.com"
+                style={{
+                  flex: 1,
+                  height: '44px',
+                  background: 'rgba(255, 255, 255, 0.04)',
+                  border: '1px solid rgba(244, 241, 233, 0.18)',
+                  borderRadius: '4px',
+                  color: '#F4F1E9',
+                  padding: '0 14px',
+                  fontSize: '13px',
+                  fontFamily: 'ui-monospace, monospace',
+                  outline: 'none',
+                  boxSizing: 'border-box',
+                }}
+              />
+              <button
+                type="button"
+                onClick={handleSendOtp}
+                disabled={otpLoading}
+                style={{
+                  padding: '0 16px',
+                  backgroundColor: '#D7FF3F',
+                  color: '#10110F',
+                  border: 'none',
+                  borderRadius: '4px',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  fontFamily: 'ui-monospace, monospace',
+                  cursor: otpLoading ? 'wait' : 'pointer',
+                }}
+              >
+                {otpLoading ? 'Sending...' : otpSent ? 'Resend Code' : 'Send Code'}
+              </button>
+            </div>
+          </div>
+
+          <div>
+            <label style={{
+              display: 'block',
+              fontFamily: 'ui-monospace, monospace',
+              fontSize: '10px',
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              color: '#88907f',
+              marginBottom: '6px',
+            }}>
+              <span>6-Digit Security Code</span>
+            </label>
+            <input
+              type="text"
+              maxLength={6}
+              value={otpCode}
+              onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+              placeholder="123456"
+              style={{
+                width: '100%',
+                height: '44px',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(244, 241, 233, 0.18)',
+                borderRadius: '4px',
+                color: '#D7FF3F',
+                padding: '0 14px',
+                fontSize: '18px',
+                letterSpacing: '0.25em',
+                fontFamily: 'ui-monospace, monospace',
+                textAlign: 'center',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || !otpCode}
+            style={{
+              height: '46px',
+              background: '#D7FF3F',
+              color: '#10110F',
+              border: 'none',
+              borderRadius: '4px',
+              fontFamily: 'ui-monospace, monospace',
+              fontSize: '11px',
+              fontWeight: 800,
+              textTransform: 'uppercase',
+              letterSpacing: '0.1em',
+              cursor: loading ? 'wait' : 'pointer',
+              opacity: loading || !otpCode ? 0.6 : 1,
+              marginTop: '4px',
+              transition: 'all 0.15s ease',
+            }}
+          >
+            {loading ? 'Verifying...' : 'Verify Code & Sign In ↗'}
+          </button>
+        </form>
+      )}
 
       {/* Direct link & credential presets */}
       <div style={{

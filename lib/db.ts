@@ -11,12 +11,9 @@ function makeId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`
 }
 
-// Build initial seed records
+// Build initial store with ONLY real studio configuration (NO fake clients, bookings, or data)
 function createInitialStore() {
   const directorId = 'usr_director_1'
-  const clientId = 'usr_client_1'
-  const bookingId = 'bk_studio_1'
-  const galleryId = 'gal_elena_1'
 
   const users: any[] = [
     {
@@ -29,57 +26,37 @@ function createInitialStore() {
       createdAt: new Date('2026-01-01T00:00:00Z'),
       updatedAt: new Date('2026-01-01T00:00:00Z'),
     },
-    {
-      id: clientId,
-      email: 'client@example.com',
-      hashedPassword: '',
-      name: 'Elena Rostova',
-      role: 'CLIENT',
-      phone: '(519) 555-0199',
-      createdAt: new Date('2026-01-02T00:00:00Z'),
-      updatedAt: new Date('2026-01-02T00:00:00Z'),
-    },
   ]
 
-  const clients: any[] = [
-    {
-      id: clientId,
-      name: 'Elena Rostova',
-      email: 'client@example.com',
-      phone: '(519) 555-0199',
-      createdAt: new Date('2026-01-02T00:00:00Z'),
-    },
-  ]
+  // Clean production arrays - NO FAKE ANYTHING
+  const clients: any[] = []
+  const inquiries: any[] = []
+  const bookings: any[] = []
+  const invoices: any[] = []
+  const contracts: any[] = []
+  const signatures: any[] = []
+  const payments: any[] = []
+  const galleries: any[] = []
+  const galleryAssets: any[] = []
+  const livestreams: any[] = []
+  const emailOtps: any[] = []
+  const notifications: any[] = []
+  const photoFavorites: any[] = []
+  const retouchingNotes: any[] = []
+  const instructors: any[] = []
+  const instructorAvailability: any[] = []
+  const instructorDaysOff: any[] = []
+  const studioClosures: any[] = []
 
-  const inquiries: any[] = [
-    {
-      id: 'inq_1',
-      name: 'Marcus Vance',
-      email: 'marcus@vancecorp.ca',
-      phone: '(519) 555-8822',
-      serviceType: 'Commercial Photography',
-      message: 'Need 8K photo coverage for our annual corporate leadership conference in London, Ontario.',
-      budget: 'Starting from $100',
-      location: 'London, ON',
-      date: '2026-11-20',
-      status: 'new',
-      adminNotes: 'Direct lead from public website hero contact form.',
-      createdAt: new Date(Date.now() - 3600 * 1000 * 4),
-    },
-    {
-      id: 'inq_2',
-      name: 'Sarah Chen',
-      email: 'sarah.chen@techhub.ca',
-      phone: '(519) 555-4321',
-      serviceType: '4K Live Streaming',
-      message: 'Hybrid summit keynote live stream with multi-cam switching and remote Q&A feed.',
-      budget: '$500+',
-      location: 'London Convention Centre',
-      date: '2026-12-05',
-      status: 'new',
-      adminNotes: 'High priority corporate booking.',
-      createdAt: new Date(Date.now() - 3600 * 1000 * 24),
-    },
+  // Real London Ontario Studio Operating Hours (Sunday=0 to Saturday=6)
+  const operatingHours: any[] = [
+    { id: 'oh_0', dayOfWeek: 0, isOpen: false, openTime: '10:00', closeTime: '16:00', slotDurationMinutes: 60 },
+    { id: 'oh_1', dayOfWeek: 1, isOpen: true,  openTime: '09:00', closeTime: '18:00', slotDurationMinutes: 60 },
+    { id: 'oh_2', dayOfWeek: 2, isOpen: true,  openTime: '09:00', closeTime: '18:00', slotDurationMinutes: 60 },
+    { id: 'oh_3', dayOfWeek: 3, isOpen: true,  openTime: '09:00', closeTime: '18:00', slotDurationMinutes: 60 },
+    { id: 'oh_4', dayOfWeek: 4, isOpen: true,  openTime: '09:00', closeTime: '18:00', slotDurationMinutes: 60 },
+    { id: 'oh_5', dayOfWeek: 5, isOpen: true,  openTime: '09:00', closeTime: '19:00', slotDurationMinutes: 60 },
+    { id: 'oh_6', dayOfWeek: 6, isOpen: true,  openTime: '10:00', closeTime: '17:00', slotDurationMinutes: 60 },
   ]
 
   const services: any[] = [
@@ -224,124 +201,6 @@ function createInitialStore() {
 
   const packages = services.flatMap((s) => s.packages)
 
-  const bookings: any[] = [
-    {
-      id: bookingId,
-      userId: clientId,
-      clientId: clientId,
-      clientName: 'Elena Rostova',
-      clientEmail: 'client@example.com',
-      clientPhone: '(519) 555-0199',
-      serviceId: 'srv_1',
-      serviceName: 'Commercial Photography',
-      packageName: 'Essential Portrait Session',
-      scheduledAt: new Date('2026-10-15T14:00:00Z'),
-      eventDate: '2026-10-15',
-      location: 'London, ON Studio — 450 Richmond St',
-      status: 'scheduled',
-      notes: 'Studio portraiture with soft octa lighting setup and prime portrait glass.',
-      createdAt: new Date('2026-03-01T12:00:00Z'),
-    },
-  ]
-
-  const invoices: any[] = [
-    {
-      id: 'inv_1',
-      invoiceNumber: 'INV-2026-001',
-      userId: clientId,
-      clientId: clientId,
-      bookingId: bookingId,
-      amount: 150.0,
-      total: 150.0,
-      amountPaid: 0,
-      depositRequired: 50.0,
-      depositPaid: 0,
-      title: 'Production Invoice — Essential Portrait Session',
-      lineItems: JSON.stringify([
-        { description: 'Essential Portrait Session (2 Hours)', amount: 100, quantity: 1 },
-        { description: 'Archival Fine Art Print Proofs', amount: 50, quantity: 1 },
-      ]),
-      squareInvoiceId: 'sq_sim_inv_101',
-      squarePaymentId: null,
-      status: 'SENT',
-      notes: 'Studio retainer due upon booking confirmation.',
-      dueDate: new Date('2026-10-14'),
-      createdAt: new Date('2026-03-01T12:30:00Z'),
-    },
-  ]
-
-  const contracts: any[] = [
-    {
-      id: 'ctr_1',
-      userId: clientId,
-      clientId: clientId,
-      bookingId: bookingId,
-      title: 'Production Agreement & Image Release',
-      content: `PRODUCTION SERVICES AGREEMENT
-
-This Agreement is entered into between Super Snap Studio (the "Studio"), a registered corporation in Canada, and the undersigned Client.
-
-1. SCOPE OF SERVICES: The Studio agrees to provide high-resolution photography / media production services as outlined in the confirmed booking schedule.
-2. DELIVERABLES: Digital proof contact sheets will be provided via the private Client Portal within 3 business days of the production session.
-3. COPYRIGHT & USAGE: The Client is granted an unrestricted, non-exclusive license for personal and commercial usage. Master RAW capture files remain archived in the Studio vault.`,
-      status: 'SENT',
-      signed: false,
-      signedAt: null,
-      signerName: null,
-      signerIp: null,
-      createdAt: new Date('2026-03-01T12:30:00Z'),
-      updatedAt: new Date('2026-03-01T12:30:00Z'),
-    },
-  ]
-
-  const galleryAssets: any[] = [
-    {
-      id: 'asset_1',
-      galleryId: galleryId,
-      fileUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=1400&q=85',
-      fileType: 'image',
-      createdAt: new Date('2026-03-02T10:00:00Z'),
-    },
-    {
-      id: 'asset_2',
-      galleryId: galleryId,
-      fileUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=1400&q=85',
-      fileType: 'image',
-      createdAt: new Date('2026-03-02T10:05:00Z'),
-    },
-  ]
-
-  const galleries: any[] = [
-    {
-      id: galleryId,
-      userId: clientId,
-      clientId: clientId,
-      bookingId: bookingId,
-      title: 'Elena Rostova — Studio Portrait Proofs',
-      description: 'Master 8K proof plates for selection and retouching.',
-      accessCode: 'SNAP2026',
-      isPublic: false,
-      createdAt: new Date('2026-03-02T10:00:00Z'),
-      media: galleryAssets,
-      assets: galleryAssets,
-    },
-  ]
-
-  const livestreams: any[] = [
-    {
-      id: 'live_1',
-      userId: clientId,
-      clientId: clientId,
-      bookingId: bookingId,
-      title: 'Elena Rostova Private Studio Broadcast',
-      streamUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      status: 'OFFLINE',
-      isLive: false,
-      scheduledAt: new Date('2026-10-15T15:00:00Z'),
-      createdAt: new Date('2026-03-01T13:00:00Z'),
-    },
-  ]
-
   const portfolioItems: any[] = [
     {
       id: 'port_1',
@@ -381,25 +240,33 @@ This Agreement is entered into between Super Snap Studio (the "Studio"), a regis
     },
   ]
 
-  const signatures: any[] = []
-  const payments: any[] = []
-
   return {
     user: users,
     client: clients,
     inquiry: inquiries,
     service: services,
     package: packages,
+    servicePackage: packages,
     booking: bookings,
     invoice: invoices,
     contract: contracts,
+    signature: signatures,
+    contractSignature: signatures,
     gallery: galleries,
     galleryAsset: galleryAssets,
     media: galleryAssets,
     livestream: livestreams,
     portfolioItem: portfolioItems,
-    signature: signatures,
     payment: payments,
+    operatingHours: operatingHours,
+    instructor: instructors,
+    instructorAvailability: instructorAvailability,
+    instructorDayOff: instructorDaysOff,
+    studioClosure: studioClosures,
+    emailOtp: emailOtps,
+    notification: notifications,
+    photoFavorite: photoFavorites,
+    retouchingNote: retouchingNotes,
   }
 }
 
@@ -617,16 +484,27 @@ function createInMemoryDb() {
     inquiry: new InMemoryCollection(store.inquiry, 'inq', getStore),
     service: new InMemoryCollection(store.service, 'srv', getStore),
     package: new InMemoryCollection(store.package, 'pkg', getStore),
+    servicePackage: new InMemoryCollection(store.package, 'pkg', getStore),
     booking: new InMemoryCollection(store.booking, 'bk', getStore),
     invoice: new InMemoryCollection(store.invoice, 'inv', getStore),
     contract: new InMemoryCollection(store.contract, 'ctr', getStore),
     signature: new InMemoryCollection(store.signature, 'sig', getStore),
+    contractSignature: new InMemoryCollection(store.signature, 'sig', getStore),
     gallery: new InMemoryCollection(store.gallery, 'gal', getStore),
     galleryAsset: new InMemoryCollection(store.galleryAsset, 'ast', getStore),
     media: new InMemoryCollection(store.galleryAsset, 'ast', getStore),
     livestream: new InMemoryCollection(store.livestream, 'live', getStore),
     portfolioItem: new InMemoryCollection(store.portfolioItem, 'port', getStore),
     payment: new InMemoryCollection(store.payment, 'pay', getStore),
+    operatingHours: new InMemoryCollection(store.operatingHours, 'oh', getStore),
+    instructor: new InMemoryCollection(store.instructor, 'inst', getStore),
+    instructorAvailability: new InMemoryCollection(store.instructorAvailability, 'ia', getStore),
+    instructorDayOff: new InMemoryCollection(store.instructorDayOff, 'ido', getStore),
+    studioClosure: new InMemoryCollection(store.studioClosure, 'sc', getStore),
+    emailOtp: new InMemoryCollection(store.emailOtp, 'otp', getStore),
+    notification: new InMemoryCollection(store.notification, 'notif', getStore),
+    photoFavorite: new InMemoryCollection(store.photoFavorite, 'fav', getStore),
+    retouchingNote: new InMemoryCollection(store.retouchingNote, 'rn', getStore),
   }
 
   const inMemoryDb: any = {

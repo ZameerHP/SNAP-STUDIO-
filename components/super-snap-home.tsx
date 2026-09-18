@@ -988,7 +988,7 @@ export function SuperSnapHome() {
         </div>
       </section>
 
-      {/* 07 / Client Portal Space (Interactive Demo) */}
+      {/* 07 / Client Portal Space */}
       <section className="portal-section section-ivory">
         <div className="site-container portal-container">
           <div className="portal-left-col">
@@ -998,57 +998,58 @@ export function SuperSnapHome() {
               <span className="word-line"><span>SELECTION LIVE.</span></span>
             </h2>
             <p>
-              Project details, raw contact sheets, client favoriting, retoucher notes, and final uncompressed master delivery — your private studio portal is always one click away.
+              Production agreements, Square invoices, real-time proofing vaults, favorited selects, and retouching notes — your private studio portal keeps your entire production organized and connected.
             </p>
             <div className="portal-action-row">
-              <a className="lime-button btn-primary" href="#contact" onClick={(e) => handleAnchorClick(e, '#contact')}>
-                Request Client Portal Access ↗
+              <a className="lime-button btn-primary" href="/portal">
+                Open Client Portal ↗
               </a>
-              <span className="portal-note">Encrypted 256-Bit SSL Cloud Storage</span>
+              <span className="portal-note">Encrypted SSL Database & Cloud Storage</span>
             </div>
           </div>
 
-          {/* Interactive Client Proofing Demo Card */}
+          {/* Genuine Client Portal Feature Showcase Card */}
           <div className="portal-card">
             <div className="portal-bar">
-              <span>SUPER SNAP / CLIENT PROOFING SUITE</span>
+              <span>SUPER SNAP / PRODUCTION PORTAL</span>
               <span className="live-pill">● SECURE LIVE</span>
             </div>
 
-            <div className="portal-thumb">
-              {/* PLACEHOLDER — replace with real shoot photo */}
-              <img src={projects[0].image} alt="Client project preview placeholder" />
-              <div className="portal-thumb-badge">SAMPLE PROOF SHEET</div>
+            <div className="portal-thumb" style={{ height: '180px' }}>
+              <img src={projects[0].image} alt="Client project deliverables" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              <div className="portal-thumb-badge">AUTHENTICATED CLIENT VAULT</div>
             </div>
 
-            <div className="portal-interactive-selects">
-              <span className="selects-label">Interactive Proofing Demo (Click to favorite selects):</span>
-              <div className="demo-selects-row">
-                {['Frame 01 / Studio Soft Key', 'Frame 02 / Natural Edge Fill', 'Frame 03 / High-Contrast Master'].map((look, idx) => {
-                  const isFav = clientSpaceSelects.includes(idx)
-                  return (
-                    <button
-                      key={look}
-                      type="button"
-                      className={`select-chip ${isFav ? 'fav-active' : ''}`}
-                      onClick={() => toggleClientFavorite(idx)}
-                    >
-                      <span>{isFav ? '★ Favorited' : '☆ Select'}</span>
-                      <small>{look}</small>
-                    </button>
-                  )
-                })}
+            <div style={{ padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ backgroundColor: '#191C16', padding: '12px', borderRadius: '4px', border: '1px solid rgba(244, 241, 233, 0.1)' }}>
+                  <span style={{ fontSize: '10px', color: '#D7FF3F', fontFamily: 'ui-monospace, monospace', display: 'block' }}>01 / BILLING</span>
+                  <strong style={{ fontSize: '13px', color: '#F4F1E9' }}>Square Checkout</strong>
+                  <p style={{ fontSize: '11px', color: '#88907f', margin: '4px 0 0 0' }}>Real invoices & live receipts</p>
+                </div>
+                <div style={{ backgroundColor: '#191C16', padding: '12px', borderRadius: '4px', border: '1px solid rgba(244, 241, 233, 0.1)' }}>
+                  <span style={{ fontSize: '10px', color: '#D7FF3F', fontFamily: 'ui-monospace, monospace', display: 'block' }}>02 / LEGAL</span>
+                  <strong style={{ fontSize: '13px', color: '#F4F1E9' }}>E-Sign Agreements</strong>
+                  <p style={{ fontSize: '11px', color: '#88907f', margin: '4px 0 0 0' }}>Digital signature & IP log</p>
+                </div>
+                <div style={{ backgroundColor: '#191C16', padding: '12px', borderRadius: '4px', border: '1px solid rgba(244, 241, 233, 0.1)' }}>
+                  <span style={{ fontSize: '10px', color: '#D7FF3F', fontFamily: 'ui-monospace, monospace', display: 'block' }}>03 / PROOFING</span>
+                  <strong style={{ fontSize: '13px', color: '#F4F1E9' }}>Vault Selects</strong>
+                  <p style={{ fontSize: '11px', color: '#88907f', margin: '4px 0 0 0' }}>Persistent DB favorites</p>
+                </div>
+                <div style={{ backgroundColor: '#191C16', padding: '12px', borderRadius: '4px', border: '1px solid rgba(244, 241, 233, 0.1)' }}>
+                  <span style={{ fontSize: '10px', color: '#D7FF3F', fontFamily: 'ui-monospace, monospace', display: 'block' }}>04 / RETOUCH</span>
+                  <strong style={{ fontSize: '13px', color: '#F4F1E9' }}>Frame Notes</strong>
+                  <p style={{ fontSize: '11px', color: '#88907f', margin: '4px 0 0 0' }}>Photo retouching notes</p>
+                </div>
               </div>
-            </div>
 
-            <div className="portal-info">
-              <div>
-                <span>SELECT STATUS:</span>
-                <strong>{clientSpaceSelects.length} Approved Frames Selected</strong>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '10px', borderTop: '1px solid rgba(244, 241, 233, 0.1)' }}>
+                <span style={{ fontSize: '11px', color: '#88907f', fontFamily: 'ui-monospace, monospace' }}>PORTAL STATUS: PRODUCTION READY</span>
+                <a href="/portal" className="portal-download-btn" style={{ padding: '8px 16px' }}>
+                  Sign In to Portal <b>↗</b>
+                </a>
               </div>
-              <a href="#contact" onClick={(e) => handleAnchorClick(e, '#contact')} className="portal-download-btn">
-                Export Proofs <b>↗</b>
-              </a>
             </div>
           </div>
         </div>

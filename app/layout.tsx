@@ -3,9 +3,12 @@ import './globals.css'
 import { SmoothScrollProvider } from '@/components/smooth-scroll-provider'
 
 export const metadata: Metadata = {
-  title: 'Super Snap Studio — Every Frame, Alive.',
-  description: 'Photography, filmmaking, live streaming, and passport photos by Super Snap Studio.',
-  generator: 'v0.app',
+  title: 'Super Snap Studio',
+  description: 'Production studio platform for photography, filmmaking, live streaming, client proofing vault, and booking operations.',
+  openGraph: {
+    title: 'Super Snap Studio',
+    description: 'Production studio platform for photography, filmmaking, live streaming, client proofing vault, and booking operations.',
+  },
   icons: {
     icon: [
       {

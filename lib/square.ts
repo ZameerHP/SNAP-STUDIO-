@@ -127,24 +127,22 @@ export interface CreateSquareInvoiceParams {
 }
 
 export interface SquareInvoiceResult {
-  squareInvoiceId: string
-  paymentUrl: string
-  status: string
-  isSimulation?: boolean
+  success: boolean
+  squareInvoiceId?: string
+  paymentUrl?: string
+  status?: string
+  error?: string
 }
 
 /**
  * Creates or retrieves a Customer in Square via the Customers API
  */
-export async function getOrCreateSquareCustomer(params: CreateSquareCustomerParams): Promise<string> {
-  const token = process.env.SQUARE_ACCESS_TOKEN?.trim()
-  if (!token || token.length < 10) {
-    return `sim_cust_${Date.now()}`
-  }
+export async function getOrCreateSquareCustomer(params: CreateSquareCustomerParams): Promise<string | null> {
+  const client = getSquareClient()
+  if (!client) return null
 
   try {
-    // Search for existing customer by email
-    const searchRes = await squareClient.customersApi.searchCustomers({
+    const listRes = await client.customers.search({
       query: {
         filter: {
           emailAddress: {
@@ -154,22 +152,21 @@ export async function getOrCreateSquareCustomer(params: CreateSquareCustomerPara
       },
     })
 
-    if (searchRes.result.customers && searchRes.result.customers.length > 0) {
-      return searchRes.result.customers[0].id!
+    if (listRes.customers && listRes.customers.length > 0 && listRes.customers[0].id) {
+      return listRes.customers[0].id
     }
 
-    // Create new customer
-    const createRes = await squareClient.customersApi.createCustomer({
+    const createRes = await client.customers.create({
       givenName: params.name,
       emailAddress: params.email,
       phoneNumber: params.phone || undefined,
       note: 'Super Snap Studio Client',
     })
 
-    return createRes.result.customer?.id || `cust_${Date.now()}`
+    return createRes.customer?.id || null
   } catch (error: any) {
-    console.error('[Square Customer API Error]', error)
-    return `sim_cust_${Date.now()}`
+    console.error('[Square Customer API Error]', error?.message || error)
+    return null
   }
 }
 
@@ -177,20 +174,13 @@ export async function getOrCreateSquareCustomer(params: CreateSquareCustomerPara
  * Creates and publishes an official Square Invoice via Square Invoices API & Orders API
  */
 export async function createSquareInvoice(params: CreateSquareInvoiceParams): Promise<SquareInvoiceResult> {
-  const token = process.env.SQUARE_ACCESS_TOKEN?.trim()
-  const locationId = process.env.SQUARE_LOCATION_ID?.trim()
+  const client = getSquareClient()
+  const locationId = await getSquareLocationId()
 
-  // If no Square credentials configured yet, return testing simulation URL
-  if (!token || !locationId || token.length < 10) {
+  if (!client || !locationId) {
     return {
-      squareInvoiceId: `sq_sim_inv_${Date.now()}`,
-      paymentUrl: `/portal/payments/simulate?invoiceId=${encodeURIComponent(
-        params.invoiceId
-      )}&amount=${params.amount}&invoiceNumber=${encodeURIComponent(
-        params.invoiceNumber
-      )}&title=${encodeURIComponent(params.title)}`,
-      status: 'SENT',
-      isSimulation: true,
+      success: false,
+      error: 'Square payment gateway is not configured (SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID required).',
     }
   }
 
@@ -203,13 +193,13 @@ export async function createSquareInvoice(params: CreateSquareInvoiceParams): Pr
     })
 
     // 2. Create Order in Square
-    const amountCents = BigInt(Math.round(params.amount * 100))
+    const amountCents = BigInt(Math.max(1, Math.round(params.amount * 100)))
     const idempotencyKey = `ord_${params.invoiceId}_${Date.now()}`
 
-    const orderRes = await squareClient.ordersApi.createOrder({
+    const orderRes = await client.orders.create({
       order: {
         locationId: locationId,
-        customerId: customerId,
+        customerId: customerId || undefined,
         lineItems: [
           {
             name: `${params.title} (${params.invoiceNumber})`,
@@ -224,7 +214,7 @@ export async function createSquareInvoice(params: CreateSquareInvoiceParams): Pr
       idempotencyKey: idempotencyKey,
     })
 
-    const orderId = orderRes.result.order?.id
+    const orderId = orderRes.order?.id
     if (!orderId) {
       throw new Error('Square Order creation failed')
     }
@@ -234,13 +224,11 @@ export async function createSquareInvoice(params: CreateSquareInvoiceParams): Pr
       .toISOString()
       .split('T')[0]
 
-    const invoiceRes = await squareClient.invoicesApi.createInvoice({
+    const invoiceRes = await client.invoices.create({
       invoice: {
         locationId: locationId,
         orderId: orderId,
-        primaryRecipient: {
-          customerId: customerId,
-        },
+        primaryRecipient: customerId ? { customerId } : undefined,
         paymentRequests: [
           {
             requestType: 'BALANCE',
@@ -254,38 +242,36 @@ export async function createSquareInvoice(params: CreateSquareInvoiceParams): Pr
       idempotencyKey: `inv_${params.invoiceId}_${Date.now()}`,
     })
 
-    const invoice = invoiceRes.result.invoice
+    const invoice = invoiceRes.invoice
     const invoiceId = invoice?.id
     if (!invoiceId) {
       throw new Error('Square Invoice creation failed')
     }
 
     // 4. Publish the Invoice so Square generates the hosted payment URL
-    const publishRes = await squareClient.invoicesApi.publishInvoice(invoiceId, {
+    const publishRes = await (client.invoices as any).publish(invoiceId, {
       version: invoice.version || 0,
       idempotencyKey: `pub_${params.invoiceId}_${Date.now()}`,
     })
 
-    const publishedInvoice = publishRes.result.invoice
-    const paymentUrl = publishedInvoice?.publicUrl || `/portal/payments/simulate?invoiceId=${encodeURIComponent(params.invoiceId)}`
+    const publishedInvoice = publishRes.invoice
+    const paymentUrl = publishedInvoice?.publicUrl
+
+    if (!paymentUrl) {
+      throw new Error('Square Invoice created but no hosted payment URL was returned')
+    }
 
     return {
+      success: true,
       squareInvoiceId: invoiceId,
       paymentUrl: paymentUrl,
       status: 'SENT',
-      isSimulation: false,
     }
   } catch (error: any) {
-    console.warn('[Square Invoices API Fallback to Simulation]', error.message)
+    console.error('[Square Invoices API Error]', error?.message || error)
     return {
-      squareInvoiceId: `sq_sim_inv_${Date.now()}`,
-      paymentUrl: `/portal/payments/simulate?invoiceId=${encodeURIComponent(
-        params.invoiceId
-      )}&amount=${params.amount}&invoiceNumber=${encodeURIComponent(
-        params.invoiceNumber
-      )}&title=${encodeURIComponent(params.title)}&error=${encodeURIComponent(error.message)}`,
-      status: 'SENT',
-      isSimulation: true,
+      success: false,
+      error: error?.message || 'Failed to create Square invoice',
     }
   }
 }
@@ -301,20 +287,20 @@ export async function createSquarePaymentLink(options: {
   title: string
   clientEmail?: string
   redirectUrl: string
-}) {
+}): Promise<{
+  success: boolean
+  url?: string
+  orderId?: string
+  paymentLinkId?: string
+  error?: string
+}> {
   const client = getSquareClient()
   const locationId = await getSquareLocationId()
 
   if (!client || !locationId) {
     return {
-      url: `/portal/payments/simulate?invoiceId=${encodeURIComponent(
-        options.invoiceId
-      )}&amount=${options.amount}&invoiceNumber=${encodeURIComponent(
-        options.invoiceNumber
-      )}&title=${encodeURIComponent(options.title)}`,
-      orderId: `sim_order_${Date.now()}`,
-      paymentLinkId: `sim_pl_${Date.now()}`,
-      isSimulation: true,
+      success: false,
+      error: 'Square payment processing is not configured with live credentials. Please configure SQUARE_ACCESS_TOKEN and SQUARE_LOCATION_ID in environment variables.',
     }
   }
 
@@ -344,26 +330,60 @@ export async function createSquarePaymentLink(options: {
 
     if (checkoutUrl) {
       return {
+        success: true,
         url: checkoutUrl,
         orderId: link?.orderId,
         paymentLinkId: link?.id,
-        isSimulation: false,
       }
     }
 
-    throw new Error('No checkout URL returned by Square')
-  } catch (err: any) {
-    console.warn('[Square Payment Link API]', err?.message || err)
     return {
-      url: `/portal/payments/simulate?invoiceId=${encodeURIComponent(
-        options.invoiceId
-      )}&amount=${options.amount}&invoiceNumber=${encodeURIComponent(
-        options.invoiceNumber
-      )}&title=${encodeURIComponent(options.title)}&error=${encodeURIComponent(err?.message || 'Square API link error')}`,
-      orderId: `sim_order_${Date.now()}`,
-      paymentLinkId: `sim_pl_${Date.now()}`,
-      isSimulation: true,
+      success: false,
+      error: 'No checkout URL returned by Square Checkout API',
     }
+  } catch (err: any) {
+    console.error('[Square Payment Link API Error]', err?.message || err)
+    return {
+      success: false,
+      error: err?.message || 'Failed to create Square payment link',
+    }
+  }
+}
+
+/**
+ * Verifies a payment with Square's official Payments API
+ */
+export async function verifySquarePayment(paymentId: string): Promise<{
+  verified: boolean
+  status?: string
+  amount?: number
+  currency?: string
+  error?: string
+}> {
+  const client = getSquareClient()
+  if (!client) {
+    return { verified: false, error: 'Square API is not configured' }
+  }
+
+  try {
+    const res = await (client.payments as any).get(paymentId)
+    const p = res.payment
+    if (p && p.status === 'COMPLETED') {
+      const amountVal = p.amountMoney?.amount ? Number(p.amountMoney.amount) / 100 : 0
+      return {
+        verified: true,
+        status: p.status,
+        amount: amountVal,
+        currency: p.amountMoney?.currency || 'CAD',
+      }
+    }
+    return {
+      verified: false,
+      status: p?.status || 'UNKNOWN',
+      error: `Square payment status is ${p?.status}`,
+    }
+  } catch (err: any) {
+    return { verified: false, error: err?.message || 'Failed to verify payment with Square' }
   }
 }
 

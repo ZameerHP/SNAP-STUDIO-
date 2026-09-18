@@ -149,29 +149,169 @@ model Contract {
 
 // Client Proofing Vaults (Super Snap Ops spec)
 model Gallery {
-  id         String         @id @default(cuid())
-  clientId   String         @map("client_id")
-  client     Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  bookingId  String?        @map("booking_id")
-  booking    Booking?       @relation(fields: [bookingId], references: [id])
-  title      String?
-  accessCode String?        @map("access_code") // Simple shareable access code
-  createdAt  DateTime       @default(now()) @map("created_at")
+  id               String         @id @default(cuid())
+  clientId         String         @map("client_id")
+  client           Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  bookingId        String?        @map("booking_id")
+  booking          Booking?       @relation(fields: [bookingId], references: [id])
+  title            String?
+  description      String?
+  accessCode       String?        @map("access_code") // Simple shareable access code
+  downloadsEnabled Boolean        @default(true) @map("downloads_enabled")
+  isPublished      Boolean        @default(true) @map("is_published")
+  createdAt        DateTime       @default(now()) @map("created_at")
 
-  assets     GalleryAsset[]
+  assets           GalleryAsset[]
+  favorites        PhotoFavorite[]
+  notes            RetouchingNote[]
 
   @@map("galleries")
 }
 
 model GalleryAsset {
-  id        String   @id @default(cuid())
-  galleryId String   @map("gallery_id")
-  gallery   Gallery  @relation(fields: [galleryId], references: [id], onDelete: Cascade)
-  fileUrl   String   @map("file_url")
-  fileType  String?  @default("image") @map("file_type") // image | video
-  createdAt DateTime @default(now()) @map("created_at")
+  id             String          @id @default(cuid())
+  galleryId      String          @map("gallery_id")
+  gallery        Gallery         @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  fileUrl        String          @map("file_url")
+  fileName       String?         @map("file_name")
+  fileSize       Int?            @map("file_size")
+  fileType       String?         @default("image") @map("file_type") // image | video
+  isDownloadable Boolean         @default(true) @map("is_downloadable")
+  createdAt      DateTime        @default(now()) @map("created_at")
+
+  favorites      PhotoFavorite[]
+  notes          RetouchingNote[]
 
   @@map("gallery_assets")
+}
+
+// Photo Proofing Selections & Persistence
+model PhotoFavorite {
+  id        String       @id @default(cuid())
+  photoId   String       @map("photo_id")
+  photo     GalleryAsset @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  galleryId String       @map("gallery_id")
+  gallery   Gallery      @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  clientId  String       @map("client_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+
+  @@unique([photoId, clientId])
+  @@map("photo_favorites")
+}
+
+model RetouchingNote {
+  id        String       @id @default(cuid())
+  photoId   String       @map("photo_id")
+  photo     GalleryAsset @relation(fields: [photoId], references: [id], onDelete: Cascade)
+  galleryId String       @map("gallery_id")
+  gallery   Gallery      @relation(fields: [galleryId], references: [id], onDelete: Cascade)
+  clientId  String       @map("client_id")
+  note      String
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  @@unique([photoId, clientId])
+  @@map("retouching_notes")
+}
+
+// Payment Transaction Tracking
+model Payment {
+  id           String   @id @default(cuid())
+  invoiceId    String   @map("invoice_id")
+  amount       Float
+  provider     String   @default("square") // square | manual
+  providerTxId String?  @map("provider_tx_id")
+  status       String   @default("PENDING") // PENDING | COMPLETED | FAILED | REFUNDED
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("payments")
+}
+
+// Availability Engine: Operating Hours
+model OperatingHours {
+  id                  String  @id @default(cuid())
+  dayOfWeek           Int     @unique @map("day_of_week") // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+  isOpen              Boolean @default(true) @map("is_open")
+  openTime            String  @default("09:00") @map("open_time") // HH:MM format
+  closeTime           String  @default("18:00") @map("close_time") // HH:MM format
+  slotDurationMinutes Int     @default(60) @map("slot_duration_minutes")
+
+  @@map("operating_hours")
+}
+
+// Availability Engine: Instructors / Photographers
+model Instructor {
+  id           String                   @id @default(cuid())
+  name         String
+  email        String                   @unique
+  phone        String?
+  active       Boolean                  @default(true)
+  createdAt    DateTime                 @default(now()) @map("created_at")
+
+  availability InstructorAvailability[]
+  daysOff      InstructorDayOff[]
+
+  @@map("instructors")
+}
+
+model InstructorAvailability {
+  id           String     @id @default(cuid())
+  instructorId String     @map("instructor_id")
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  dayOfWeek    Int        @map("day_of_week") // 0-6
+  startTime    String     @map("start_time") // HH:MM
+  endTime      String     @map("end_time") // HH:MM
+
+  @@map("instructor_availability")
+}
+
+model InstructorDayOff {
+  id           String     @id @default(cuid())
+  instructorId String     @map("instructor_id")
+  instructor   Instructor @relation(fields: [instructorId], references: [id], onDelete: Cascade)
+  date         String     // YYYY-MM-DD format
+  reason       String?
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@unique([instructorId, date])
+  @@map("instructor_days_off")
+}
+
+// Availability Engine: Studio-wide Closures
+model StudioClosure {
+  id        String   @id @default(cuid())
+  date      String   @unique // YYYY-MM-DD format
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("studio_closures")
+}
+
+// Real Email OTP Verification
+model EmailOtp {
+  id        String   @id @default(cuid())
+  email     String
+  code      String
+  expiresAt DateTime @map("expires_at")
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([email, code])
+  @@map("email_otps")
+}
+
+// System & Client Notifications
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  title     String
+  message   String
+  type      String   @default("info") // info | booking | payment | contract | gallery
+  isRead    Boolean  @default(false) @map("is_read")
+  link      String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
 }
 
 // Livestream Broadcast Links (Super Snap Ops spec)

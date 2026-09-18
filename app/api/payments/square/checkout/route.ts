@@ -48,6 +48,13 @@ export async function POST(req: NextRequest) {
       redirectUrl: redirectUrl,
     })
 
+    if (!squareResult.success || !squareResult.url) {
+      return NextResponse.json(
+        { error: squareResult.error || 'Failed to initialize Square payment session.' },
+        { status: 503 }
+      )
+    }
+
     // Record pending payment in database
     await db.payment.create({
       data: {
@@ -62,7 +69,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       checkoutUrl: squareResult.url,
-      isSimulation: squareResult.isSimulation,
       balanceDue,
     })
   } catch (error: any) {

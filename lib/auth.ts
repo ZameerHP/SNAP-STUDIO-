@@ -77,28 +77,30 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!user) return null
 
         let passwordsMatch = false
-        // 1. Check known owner passwords or accept owner credentials
-        if (isAdminLogin) {
-          if (
-            password === 'AdminPassword2026' ||
-            password === 'AdminPassword2026!' ||
-            password.length >= 1
-          ) {
-            passwordsMatch = true
-          }
-        } else if (normalizedEmail === 'client@example.com' || user.role === 'CLIENT') {
-          if (
-            password === 'ClientPassword2026' ||
-            password === 'ClientPassword2026!' ||
-            password.length >= 1
-          ) {
-            passwordsMatch = true
-          }
+
+        // 1. If user has a bcrypt hashed password set, verify it strictly
+        if (user.hashedPassword) {
+          passwordsMatch = await bcrypt.compare(password, user.hashedPassword)
         }
 
-        // 2. If user has a specific bcrypt hashed password set
-        if (!passwordsMatch && user.hashedPassword) {
-          passwordsMatch = await bcrypt.compare(password, user.hashedPassword)
+        // 2. Default initial credentials if hashed password not yet initialized in DB
+        if (!passwordsMatch) {
+          const expectedAdminPassword = process.env.ADMIN_PASSWORD || 'AdminPassword2026'
+          if (isAdminLogin && (password === expectedAdminPassword || password === `${expectedAdminPassword}!`)) {
+            passwordsMatch = true
+            // Save hash for future logins
+            try {
+              const hashed = await bcrypt.hash(password, 10)
+              await db.user.update({
+                where: { id: user.id },
+                data: { hashedPassword: hashed },
+              })
+            } catch {
+              // safe to ignore update error
+            }
+          } else if (normalizedEmail === 'client@example.com' && (password === 'ClientPassword2026!' || password === 'ClientPassword2026')) {
+            passwordsMatch = true
+          }
         }
 
         if (!passwordsMatch) return null
