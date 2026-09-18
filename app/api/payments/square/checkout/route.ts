@@ -45,7 +45,6 @@ export async function POST(req: NextRequest) {
       currency: 'CAD',
       title: invoice.title,
       clientEmail: invoice.user?.email,
-      clientName: invoice.user?.name || undefined,
       redirectUrl: redirectUrl,
     })
 

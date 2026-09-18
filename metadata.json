@@ -1,0 +1,8 @@
+{
+  "name": "Super Snap Studio",
+  "description": "Production studio platform for photography, filmmaking, live streaming, client proofing vault, and booking operations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

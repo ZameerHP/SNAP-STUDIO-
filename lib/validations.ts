@@ -8,6 +8,7 @@ export const inquirySchema = z.object({
   budget: z.string().optional().or(z.literal('')),
   location: z.string().optional().or(z.literal('')),
   date: z.string().optional().or(z.literal('')),
+  timeSlot: z.string().optional().or(z.literal('')),
   message: z.string().min(5, 'Message must be at least 5 characters'),
 })
 

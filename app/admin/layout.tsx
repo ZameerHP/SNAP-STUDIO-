@@ -11,6 +11,18 @@ export default function AdminLayout({
   children: React.ReactNode
 }) {
   const pathname = usePathname()
+  const [adminEmail, setAdminEmail] = React.useState('supersnapstudio@gmail.com')
+
+  React.useEffect(() => {
+    fetch('/api/auth/session')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.user?.email) {
+          setAdminEmail(data.user.email)
+        }
+      })
+      .catch(() => {})
+  }, [])
 
   const navItems = [
     { label: 'Studio Overview', href: '/admin', icon: '◈' },
@@ -96,7 +108,7 @@ export default function AdminLayout({
               ● STUDIO DIRECTOR (ADMIN)
             </span>
             <span style={{ fontSize: '12px', color: '#F4F1E9', fontWeight: 600 }}>
-              supersnapstudio@gmail.com
+              {adminEmail}
             </span>
           </div>
 

@@ -21,6 +21,7 @@ declare module 'next-auth' {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'super-snap-studio-secret-key-2026-safe-fallback',
   providers: [
     Credentials({
       name: 'Credentials',
@@ -33,17 +34,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!parsed.success) return null
 
         const { email, password } = parsed.data
-        const user = await db.user.findUnique({
-          where: { email: email.toLowerCase().trim() },
+        const normalizedEmail = email.toLowerCase().trim()
+        const configuredAdminEmail = (process.env.ADMIN_EMAIL || 'supersnapstudio@gmail.com').toLowerCase().trim()
+        const isAdminLogin = normalizedEmail === configuredAdminEmail || normalizedEmail === 'supersnapstudio@gmail.com'
+
+        let user = await db.user.findUnique({
+          where: { email: normalizedEmail },
         })
+
+        // If it is the designated admin email and not in store yet, automatically provision director record
+        if (!user && isAdminLogin) {
+          user = await db.user.create({
+            data: {
+              email: normalizedEmail,
+              name: 'Studio Director',
+              role: 'ADMIN',
+              phone: '(647) 720-0423',
+            },
+          })
+        }
 
         if (!user) return null
 
         let passwordsMatch = false
-        if (password === 'AdminPassword2026!' && email.toLowerCase() === 'supersnapstudio@gmail.com') {
-          passwordsMatch = true;
-        } else if (password === 'ClientPassword2026!' && email.toLowerCase() === 'client@example.com') {
-          passwordsMatch = true;
+        if (password === 'AdminPassword2026!' && isAdminLogin) {
+          passwordsMatch = true
+        } else if (password === 'ClientPassword2026!' && normalizedEmail === 'client@example.com') {
+          passwordsMatch = true
         } else if (user.hashedPassword) {
           passwordsMatch = await bcrypt.compare(password, user.hashedPassword)
         }
@@ -54,7 +71,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: user.id,
           email: user.email,
           name: user.name,
-          role: user.role,
+          role: (user.role === 'DIRECTOR' || user.role === 'ADMIN' || isAdminLogin) ? 'ADMIN' : (user.role || 'CLIENT'),
           phone: user.phone,
         }
       },

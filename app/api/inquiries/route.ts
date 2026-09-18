@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { inquirySchema } from '@/lib/validations'
 import { sendAdminNotification } from '@/lib/email'
+import { getSupabase } from '@/lib/supabase'
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,7 +19,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const { name, email, phone, service, budget, location, date, message } = validation.data
+    const { name, email, phone, service, budget, location, date, timeSlot, message } = validation.data
+    const fullDateSchedule = [date, timeSlot].filter(Boolean).join(' • ') || null
 
     const inquiry = await db.inquiry.create({
       data: {
@@ -28,11 +30,35 @@ export async function POST(req: NextRequest) {
         serviceType: service,
         budget: budget || null,
         location: location || null,
-        date: date || null,
+        date: fullDateSchedule,
         message,
         status: 'new',
       },
     })
+
+    // Non-blocking sync to Supabase if configured
+    try {
+      const supabase = getSupabase()
+      if (supabase) {
+        await supabase.from('inquiries').insert([
+          {
+            id: inquiry.id,
+            name,
+            email,
+            phone: phone || null,
+            service: service,
+            service_type: service,
+            budget: budget || null,
+            location: location || null,
+            message,
+            status: 'new',
+            created_at: new Date().toISOString(),
+          },
+        ])
+      }
+    } catch (supaErr) {
+      // Table might not exist yet; non-blocking
+    }
 
     // Trigger admin notification
     await sendAdminNotification({

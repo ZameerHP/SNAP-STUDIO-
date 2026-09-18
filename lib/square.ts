@@ -1,20 +1,109 @@
 import crypto from 'crypto'
+import { SquareClient, SquareEnvironment } from 'square'
 
-// Mocked Square Client
+let squareClientInstance: SquareClient | null = null
+let cachedLocationId: string | null = null
+let cachedLocationName: string | null = null
+
+export function getSquareClient(): SquareClient | null {
+  const token = process.env.SQUARE_ACCESS_TOKEN?.trim()
+  if (!token || token.length < 8) {
+    return null
+  }
+  if (squareClientInstance) {
+    return squareClientInstance
+  }
+  const isProdToken = token.startsWith('EAAA')
+  const envConfig = (process.env.SQUARE_ENVIRONMENT || '').toLowerCase()
+  // EAAA access tokens are Square Production tokens
+  const useProduction = isProdToken || envConfig === 'production'
+  try {
+    squareClientInstance = new SquareClient({
+      token,
+      environment: useProduction ? SquareEnvironment.Production : SquareEnvironment.Sandbox,
+    })
+    return squareClientInstance
+  } catch (err) {
+    console.error('[Square] Failed to initialize SquareClient:', err)
+    return null
+  }
+}
+
+export async function getSquareLocationId(): Promise<string | null> {
+  const envLoc = process.env.SQUARE_LOCATION_ID?.trim()
+  if (envLoc) return envLoc
+  if (cachedLocationId) return cachedLocationId
+  const client = getSquareClient()
+  if (!client) return null
+  try {
+    const res = await client.locations.list()
+    const activeLoc = res.locations?.find((l) => l.status === 'ACTIVE') || res.locations?.[0]
+    if (activeLoc?.id) {
+      cachedLocationId = activeLoc.id
+      cachedLocationName = activeLoc.name || 'Super Snap Studio'
+      return cachedLocationId
+    }
+  } catch (err: any) {
+    console.warn('[Square] Could not fetch locations:', err?.message || err)
+  }
+  return 'LHDV8KVY8QD1J'
+}
+
+export async function checkSquareHealth(): Promise<{
+  configured: boolean
+  connected: boolean
+  locationId?: string
+  locationName?: string
+  environment: string
+  message: string
+}> {
+  const token = process.env.SQUARE_ACCESS_TOKEN?.trim()
+  if (!token) {
+    return {
+      configured: false,
+      connected: false,
+      environment: process.env.SQUARE_ENVIRONMENT || 'sandbox',
+      message: 'SQUARE_ACCESS_TOKEN is not set',
+    }
+  }
+  const client = getSquareClient()
+  if (!client) {
+    return {
+      configured: true,
+      connected: false,
+      environment: process.env.SQUARE_ENVIRONMENT || 'sandbox',
+      message: 'SquareClient initialization failed',
+    }
+  }
+  try {
+    const res = await client.locations.list()
+    const activeLoc = res.locations?.find((l) => l.status === 'ACTIVE') || res.locations?.[0]
+    const locId = activeLoc?.id || 'LHDV8KVY8QD1J'
+    const locName = activeLoc?.name || 'Super Snap Studio'
+    cachedLocationId = locId
+    cachedLocationName = locName
+    return {
+      configured: true,
+      connected: true,
+      locationId: locId,
+      locationName: locName,
+      environment: token.startsWith('EAAA') ? 'production' : 'sandbox',
+      message: `Connected to Square location: ${locName} (${locId})`,
+    }
+  } catch (err: any) {
+    return {
+      configured: true,
+      connected: false,
+      environment: process.env.SQUARE_ENVIRONMENT || 'sandbox',
+      message: err?.message || 'Failed to authenticate with Square API',
+    }
+  }
+}
+
+// Backward compatibility helper
 export const squareClient = {
-  customersApi: {
-    searchCustomers: async () => ({ result: { customers: [] } }),
-    createCustomer: async () => ({ result: { customer: { id: `sim_cust_${Date.now()}` } } })
-  },
-  ordersApi: {
-    createOrder: async () => ({ result: { order: { id: `sim_order_${Date.now()}` } } })
-  },
-  invoicesApi: {
-    createInvoice: async () => ({ result: { invoice: { id: `sim_inv_${Date.now()}` } } }),
-    publishInvoice: async () => ({ result: { invoice: { publicUrl: '/portal/payments/simulate' } } })
-  },
-  checkoutApi: {
-    createPaymentLink: async () => ({ result: { paymentLink: { url: '/portal/payments/simulate' } } })
+  get client() {
+    return getSquareClient()
   }
 } as any
 
@@ -213,10 +302,10 @@ export async function createSquarePaymentLink(options: {
   clientEmail?: string
   redirectUrl: string
 }) {
-  const token = process.env.SQUARE_ACCESS_TOKEN?.trim()
-  const locationId = process.env.SQUARE_LOCATION_ID?.trim()
+  const client = getSquareClient()
+  const locationId = await getSquareLocationId()
 
-  if (!token || !locationId || token.length < 10) {
+  if (!client || !locationId) {
     return {
       url: `/portal/payments/simulate?invoiceId=${encodeURIComponent(
         options.invoiceId
@@ -230,8 +319,8 @@ export async function createSquarePaymentLink(options: {
   }
 
   try {
-    const amountCents = BigInt(Math.round(options.amount * 100))
-    const res = await squareClient.checkoutApi.createPaymentLink({
+    const amountCents = BigInt(Math.max(1, Math.round(options.amount * 100)))
+    const res = await client.checkout.paymentLinks.create({
       idempotencyKey: `chk_${options.invoiceId}_${Date.now()}`,
       quickPay: {
         name: `Super Snap Studio — ${options.invoiceNumber} (${options.title})`,
@@ -239,7 +328,7 @@ export async function createSquarePaymentLink(options: {
           amount: amountCents,
           currency: (options.currency || 'CAD') as any,
         },
-        locationId: locationId,
+        locationId,
       },
       checkoutOptions: {
         redirectUrl: options.redirectUrl,
@@ -250,21 +339,27 @@ export async function createSquarePaymentLink(options: {
       },
     })
 
-    const link = res.result.paymentLink
-    return {
-      url: link?.url || link?.longUrl || `/portal/payments/simulate?invoiceId=${encodeURIComponent(options.invoiceId)}`,
-      orderId: link?.orderId,
-      paymentLinkId: link?.id,
-      isSimulation: false,
+    const link = res.paymentLink
+    const checkoutUrl = link?.url || link?.longUrl
+
+    if (checkoutUrl) {
+      return {
+        url: checkoutUrl,
+        orderId: link?.orderId,
+        paymentLinkId: link?.id,
+        isSimulation: false,
+      }
     }
+
+    throw new Error('No checkout URL returned by Square')
   } catch (err: any) {
-    console.warn('[Square Payment Link API Fallback]', err.message)
+    console.warn('[Square Payment Link API]', err?.message || err)
     return {
       url: `/portal/payments/simulate?invoiceId=${encodeURIComponent(
         options.invoiceId
       )}&amount=${options.amount}&invoiceNumber=${encodeURIComponent(
         options.invoiceNumber
-      )}&title=${encodeURIComponent(options.title)}&error=${encodeURIComponent(err.message)}`,
+      )}&title=${encodeURIComponent(options.title)}&error=${encodeURIComponent(err?.message || 'Square API link error')}`,
       orderId: `sim_order_${Date.now()}`,
       paymentLinkId: `sim_pl_${Date.now()}`,
       isSimulation: true,

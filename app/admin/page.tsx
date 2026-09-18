@@ -1,6 +1,8 @@
 import React from 'react'
 import Link from 'next/link'
 import { db } from '@/lib/db'
+import { checkSupabaseHealth } from '@/lib/supabase'
+import { checkSquareHealth } from '@/lib/square'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +15,8 @@ export default async function AdminDashboardPage() {
     invoicesIssuedCount,
     registeredClientsCount,
     recentInquiries,
+    supabaseHealth,
+    squareHealth,
   ] = await Promise.all([
     db.inquiry.count(),
     db.inquiry.count({ where: { status: 'new' } }),
@@ -23,7 +27,11 @@ export default async function AdminDashboardPage() {
       take: 5,
       orderBy: { createdAt: 'desc' },
     }),
+    checkSupabaseHealth(),
+    checkSquareHealth(),
   ])
+
+  const adminEmail = process.env.ADMIN_EMAIL || 'supersnapstudio@gmail.com'
 
   return (
     <div>
@@ -140,6 +148,102 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
+      {/* Cloud & Integrations Status */}
+      <div style={{
+        backgroundColor: '#131512',
+        border: '1px solid rgba(244, 241, 233, 0.1)',
+        borderRadius: '4px',
+        padding: '18px 24px',
+        marginBottom: '28px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+        gap: '20px',
+        alignItems: 'center',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            backgroundColor: supabaseHealth.connected ? '#3ECF8E' : supabaseHealth.configured ? '#FFAA00' : '#88907f',
+            boxShadow: supabaseHealth.connected ? '0 0 10px rgba(62, 207, 142, 0.6)' : 'none',
+            flexShrink: 0,
+          }} />
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '11px', fontWeight: 700, color: '#F4F1E9' }}>
+                Supabase Cloud Infrastructure
+              </span>
+              <span style={{
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: '9px',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                backgroundColor: supabaseHealth.connected ? 'rgba(62, 207, 142, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                color: supabaseHealth.connected ? '#3ECF8E' : '#88907f',
+                textTransform: 'uppercase',
+              }}>
+                {supabaseHealth.connected ? 'Live & Connected' : supabaseHealth.configured ? 'Configured' : 'Local In-Memory'}
+              </span>
+            </div>
+            <p style={{ fontSize: '11px', color: '#88907f', margin: '3px 0 0 0', fontFamily: 'ui-monospace, monospace' }}>
+              {supabaseHealth.projectRef ? `Project Ref: ${supabaseHealth.projectRef} • Auth & REST API Online` : 'Ready for database synchronization'}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderLeft: '1px solid rgba(244, 241, 233, 0.08)', paddingLeft: '20px' }}>
+          <div style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            backgroundColor: squareHealth.connected ? '#006AFF' : squareHealth.configured ? '#FFAA00' : '#88907f',
+            boxShadow: squareHealth.connected ? '0 0 10px rgba(0, 106, 255, 0.6)' : 'none',
+            flexShrink: 0,
+          }} />
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '11px', fontWeight: 700, color: '#F4F1E9' }}>
+                Square Payments API
+              </span>
+              <span style={{
+                fontFamily: 'ui-monospace, monospace',
+                fontSize: '9px',
+                padding: '2px 6px',
+                borderRadius: '3px',
+                backgroundColor: squareHealth.connected ? 'rgba(0, 106, 255, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                color: squareHealth.connected ? '#60A5FA' : '#88907f',
+                textTransform: 'uppercase',
+              }}>
+                {squareHealth.connected ? 'Production Active' : squareHealth.configured ? 'Configured' : 'Simulation Mode'}
+              </span>
+            </div>
+            <p style={{ fontSize: '11px', color: '#88907f', margin: '3px 0 0 0', fontFamily: 'ui-monospace, monospace' }}>
+              {squareHealth.locationName ? `${squareHealth.locationName} (${squareHealth.locationId})` : 'Live checkout links ready'}
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', borderLeft: '1px solid rgba(244, 241, 233, 0.08)', paddingLeft: '20px' }}>
+          <div style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            backgroundColor: '#D7FF3F',
+            boxShadow: '0 0 10px rgba(215, 255, 63, 0.6)',
+            flexShrink: 0,
+          }} />
+          <div>
+            <span style={{ fontFamily: 'ui-monospace, monospace', fontSize: '11px', fontWeight: 700, color: '#F4F1E9' }}>
+              Studio Director Admin
+            </span>
+            <p style={{ fontSize: '11px', color: '#D7FF3F', margin: '3px 0 0 0', fontFamily: 'ui-monospace, monospace' }}>
+              {adminEmail}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Quick Ops Tools */}
       <div style={{
         backgroundColor: '#131512',
@@ -208,7 +312,7 @@ export default async function AdminDashboardPage() {
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            {recentInquiries.map((inq) => (
+            {recentInquiries.map((inq: any) => (
               <div
                 key={inq.id}
                 style={{
