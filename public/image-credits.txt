@@ -1,0 +1,70 @@
+Super Snap Studio — demonstration photography. Not commissioned studio work.
+
+[
+  {
+    "name": "wedding",
+    "path": "/workspace/scratch/8849a9f73c68/recovered-assets/wedding.jpg",
+    "source": "https://unsplash.com/photos/a-couple-in-wedding-attire-on-a-beach-at-sunset-yHcB69F9v8I",
+    "image_url": "https://images.unsplash.com/photo-1768611262811-7d7fdfbc0bc0?auto=format&fit=crop&fm=jpg&q=85&w=2000",
+    "credit": "Fotógrafo Samuel Cruz",
+    "license": "Unsplash License",
+    "license_url": "https://unsplash.com/license",
+    "evidence": "Source photo page previously verified to state: Free to use under the Unsplash License",
+    "bytes": 297987
+  },
+  {
+    "name": "fashion",
+    "path": "/workspace/scratch/8849a9f73c68/recovered-assets/fashion.jpg",
+    "source": "https://unsplash.com/photos/woman-wearing-black-dress-o2aLiI2gwPk",
+    "image_url": "https://images.unsplash.com/photo-1562349377-0ff74adf1365?auto=format&fit=crop&fm=jpg&q=85&w=1600",
+    "credit": "Vladimir Fedotov",
+    "license": "Unsplash License",
+    "license_url": "https://unsplash.com/license",
+    "evidence": "Source photo page previously verified to state: Free to use under the Unsplash License",
+    "bytes": 380794
+  },
+  {
+    "name": "studio",
+    "path": "/workspace/scratch/8849a9f73c68/recovered-assets/studio.jpg",
+    "source": "https://unsplash.com/photos/a-man-standing-in-front-of-a-camera-in-a-studio-b0jkfuBHFtQ",
+    "image_url": "https://images.unsplash.com/photo-1649376673583-fcefc980071d?auto=format&fit=crop&fm=jpg&q=85&w=2000",
+    "credit": "Kyle Loftus",
+    "license": "Unsplash License",
+    "license_url": "https://unsplash.com/license",
+    "evidence": "Source photo page previously verified to state: Free to use under the Unsplash License",
+    "bytes": 937370
+  },
+  {
+    "name": "concert",
+    "path": "/workspace/scratch/8849a9f73c68/recovered-assets/concert.jpg",
+    "source": "https://unsplash.com/photos/crowd-partying-with-red-stage-lights-wahZ_EpEOmw",
+    "image_url": "https://images.unsplash.com/photo-1578946956849-3b335519f039?auto=format&fit=crop&fm=jpg&q=85&w=2000",
+    "credit": "Zachary Smith",
+    "license": "Unsplash License",
+    "license_url": "https://unsplash.com/license",
+    "evidence": "Source photo page previously verified to state: Free to use under the Unsplash License",
+    "bytes": 483214
+  },
+  {
+    "name": "landscape",
+    "path": "/workspace/scratch/8849a9f73c68/recovered-assets/landscape.jpg",
+    "source": "https://unsplash.com/photos/grasses-in-foreground-with-misty-mountains-beyond-t_jSrDW5xPw",
+    "image_url": "https://images.unsplash.com/photo-1760300908166-45f1ebeb202e?auto=format&fit=crop&fm=jpg&q=85&w=2000",
+    "credit": "Adam Hornyak",
+    "license": "Unsplash License",
+    "license_url": "https://unsplash.com/license",
+    "evidence": "Source photo page previously verified to state: Free to use under the Unsplash License",
+    "bytes": 381202
+  },
+  {
+    "name": "headshot",
+    "path": "/workspace/scratch/8849a9f73c68/recovered-assets/headshot.jpg",
+    "source": "https://unsplash.com/photos/man-in-white-dress-shirt-2mWKL_I70qk",
+    "image_url": "https://images.unsplash.com/photo-1579983926774-399a9cb765c3?auto=format&fit=crop&fm=jpg&q=85&w=2000",
+    "credit": "Chalo Garcia",
+    "license": "Unsplash License",
+    "license_url": "https://unsplash.com/license",
+    "evidence": "Source photo page previously verified to state: Free to use under the Unsplash License",
+    "bytes": 1021914
+  }
+]
