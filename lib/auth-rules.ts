@@ -1,5 +1,8 @@
-export function ownerEmailMatches(email: string, configured: string | undefined) {
-  return !!configured?.trim() && email.trim().toLowerCase() === configured.trim().toLowerCase();
+export function ownerEmailMatches(email: string, ...configured: Array<string | undefined>) {
+  const actual = email.trim().toLowerCase();
+  return configured
+    .flatMap(value => (value || '').split(','))
+    .some(value => value.trim().toLowerCase() === actual);
 }
 export function safeNext(value: unknown, fallback = '/client') {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return fallback;
