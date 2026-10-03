@@ -35,7 +35,7 @@ Copy the optional Square, Resend and DocuSeal names from [`.env.example`](.env.e
 - Build Command: **`pnpm build`**.
 - Output Directory: **`.next`** (or the Next.js default; remove any old custom `dist` override).
 - Install Command: default package-manager detection / `pnpm install --frozen-lockfile`.
-- Use Node.js 22 or 24.
+- Use Node.js 22.x, matching the version range in `package.json`.
 - Deploy again after saving environment variables. If the old failed build was cached, redeploy without the existing build cache.
 
 `vercel.json` sets the framework, build command and output directory. The previous adapter build did not create Next.js's `.next/routes-manifest.json`; this repository now runs `next build` and produces normal Next.js output. There are no Cloudflare runtime, D1/R2, Wrangler or trusted-header login requirements.
