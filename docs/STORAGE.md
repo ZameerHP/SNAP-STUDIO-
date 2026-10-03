@@ -1,27 +1,13 @@
-# Database and photo storage allowances
+# Database and media storage
 
-Verified against official Cloudflare documentation on 27 September 2026.
+Vercel hosts Next.js; Supabase stores records, authentication users and uploaded originals. No Cloudflare account or bindings are required.
 
-This Site uses D1 for structured records and R2 for original uploaded images/videos. The Sites-managed account quota and billing entitlement are not exposed by the available project tools. Do not promise that Cloudflare's direct-account free allowances below are automatically allocated to this ChatGPT Site.
+Run `supabase/setup.sql` once in a new Supabase project. It enables RLS on every application table and removes anonymous/authenticated direct table privileges. Server routes verify the signed-in user with Supabase Auth and check project/client ownership before using the server secret. No arbitrary SQL endpoint is exposed.
 
-If deployed under your own Cloudflare account:
+The `studio-media` bucket is private. Owners upload directly using signed upload URLs; the server checks file metadata and media signatures before making the file visible in a gallery. The maximum is 25 MiB per file: JPEG, PNG, WebP, MP4 or WebM. No transcoding is included. Unfinished uploads may leave pending rows/objects; periodically remove abandoned uploads through Supabase after their signed upload token expires (allow at least two hours). Never delete finalized media during that cleanup.
 
-| Product | Published free allowance |
-| --- | --- |
-| D1 | 500 MB maximum per database; 5 GB total across the free account's databases |
-| D1 reads | 5 million rows read per day |
-| D1 writes | 100,000 rows written per day |
-| R2 Standard | 10 GB-month of storage per month |
-| R2 operations | 1 million Class A and 10 million Class B operations per month |
-| R2 Internet egress | No egress charge |
+Private gallery access is authorized before a five-minute signed read URL is returned. Anyone possessing that URL can view the file until it expires. A published project intentionally exposes its gallery. Disabling downloads removes the download action but cannot prevent saving visible media or taking screenshots.
 
-D1 counts rows scanned, not visitors or just query count. Index writes also count. Free D1 operation limits can block queries until reset; storage ceilings block additional storage until addressed. R2 allowances concern average stored volume, not a fresh permanent 10 GB addition every month. Compute/hosting requests and other products have their own limits and costs.
+Database, storage and egress allowances depend on your Supabase plan; check the project Usage page and https://supabase.com/pricing before promising capacity. Original photos/videos usually consume storage and bandwidth faster than database records. This application does not impose a total storage quota beyond the provider plan. Its dashboard currently loads up to 500 recent projects/invoices/messages, 200 enquiries, 1,000 clients and 1,000 media records per request; large archives need pagination before exceeding these display limits.
 
-Approximate illustration only: 10 GB could hold about 2,000 photos averaging 5 MB, or 1,000 photos averaging 10 MB, before allowing for videos/other stored files. Real capacity depends on actual media sizes and retention. This application's per-file upload maximum is 25 MB regardless of the storage product's higher object limits.
-
-Structured records are usually much smaller than photographs, but no reliable client-count limit follows from GB alone: each client can have many messages, files, invoice items and audit entries. The current dashboard also needs pagination/query tuning before operating a very large studio catalogue.
-
-Official references:
-- https://developers.cloudflare.com/d1/platform/pricing/
-- https://developers.cloudflare.com/d1/platform/limits/
-- https://developers.cloudflare.com/r2/pricing/
+Back up both PostgreSQL records and storage objects. A GitHub clone or Vercel redeploy is not a database/media backup. Previous hosted records are not automatically migrated by adding Supabase keys.

@@ -1,1 +1,8 @@
-import {all,json} from '@/lib/studio-server';export async function GET(){try{const [s,p]=await Promise.all([all('SELECT * FROM settings'),all("SELECT p.id,p.title,p.description,p.service,(SELECT m.id FROM media m WHERE m.project_id=p.id AND m.type LIKE 'image/%' ORDER BY CASE WHEN m.id=p.cover_id THEN 0 ELSE 1 END,m.position,m.created_at LIMIT 1) AS cover FROM projects p WHERE p.published=1 ORDER BY p.created_at DESC")]);return json({settings:Object.fromEntries(s.map(x=>[x.key,x.value])),projects:p})}catch{return json({settings:{},projects:[]})}}
+import { db, json, result, type Row } from '@/lib/studio-server';
+export async function GET() {
+  try {
+    const [settings, projects] = await Promise.all([result<Row[]>(db().from('settings').select('key,value')), result<Row[]>(db().from('projects').select('id,title,description,service,cover_id').eq('published', 1).order('created_at', { ascending: false }).limit(100))]);
+    const media = projects.length ? await result<Row[]>(db().from('media').select('id,project_id,type,position').in('project_id', projects.map(p => p.id)).like('type', 'image/%').order('position').limit(1000)) : [];
+    return json({ settings: Object.fromEntries(settings.map(s => [s.key, s.value])), projects: projects.map(({ cover_id, ...p }) => ({ ...p, cover: media.find(m => m.id === cover_id)?.id || media.find(m => m.project_id === p.id)?.id })) });
+  } catch { return json({ settings: {}, projects: [] }); }
+}

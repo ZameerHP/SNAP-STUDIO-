@@ -16,8 +16,8 @@ This integration sends buyers to a Square-hosted checkout page. Production payme
 Current values for the two URLs:
 
 ```
-SITE_URL=https://super-snap-studio.zameerpanhwer67.chatgpt.site
-SQUARE_WEBHOOK_URL=https://super-snap-studio.zameerpanhwer67.chatgpt.site/api/webhooks/square
+SITE_URL=https://YOUR-SITE.vercel.app
+SQUARE_WEBHOOK_URL=https://YOUR-SITE.vercel.app/api/webhooks/square
 ```
 
 Add these to Sites runtime environment variables, mark the token and signature key as secrets, then redeploy. The studio dashboard deliberately has no secret-key text fields. The repository's `.env.example` documents names; local `.env` is for local development only. Do not put tokens into frontend variables, committed files, or chat messages.

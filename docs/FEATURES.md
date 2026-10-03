@@ -26,7 +26,7 @@
 
 ## Client dashboard — /client
 
-- ChatGPT sign-in with the email assigned by the owner; there is no shared studio password.
+- Supabase email/password sign-in with a confirmed email matching the client assigned by the owner.
 - View only assigned projects, images and videos; gallery lightbox and navigation.
 - Mark favourites, submit selections, and download files when allowed.
 - View assigned invoices/PDFs and pay deposits or remaining balances using Square after connection.
@@ -35,7 +35,7 @@
 
 ## Storage and access
 
-D1 stores clients, enquiries, project/media metadata, favourites, invoices, payment records, checkout attempts, documents, messages, settings, webhook event IDs, and audit entries. R2 stores uploaded original media bytes. Private media and invoice routes authorize requests on the server. Client data and uploaded media are not part of the GitHub repository.
+Supabase Postgres stores clients, enquiries, project/media metadata, favourites, invoices, payment records, checkout attempts, documents, messages, settings, webhook event IDs, and audit entries. Supabase Storage stores uploaded original media bytes. Private media and invoice routes authorize requests on the server. Client data and uploaded media are not part of the GitHub repository.
 
 Allowed uploads: JPEG, PNG, WebP, MP4, WebM, up to 25 MB each. No transcoding, thumbnail generation pipeline, bulk ZIP downloads, or deletion/retention UI is implemented. Download controls cannot prevent screenshots. This is a small-studio implementation; large catalogues need pagination/query tuning and operational monitoring before a scale claim is appropriate.
 
@@ -47,7 +47,7 @@ Allowed uploads: JPEG, PNG, WebP, MP4, WebM, up to 25 MB each. No transcoding, t
 - Automatic invitation, invoice, gallery-ready, reminder, and enquiry emails are not implemented. Email sending requires an explicit owner action.
 - Live Streaming is a service offered by the studio, not a streaming/video-call platform implemented inside this website.
 - Passport Photos is a service enquiry, not an automated passport-photo crop/compliance checker.
-- The deployment remains owner-private; clients and external webhooks require the owner to adjust Site audience deliberately.
+- Vercel deployment protection must allow the production webhook URLs to be reached by the configured providers.
 - Set OWNER_EMAIL to the actual studio owner for handover. Provide genuine portfolio media, showreel and final business/tax details.
 
-This repository targets Sites' trusted authentication dispatcher and Cloudflare runtime. Moving it to a different host requires authentication and storage adaptation; GitHub upload alone does not migrate live data or configure Vercel.
+This repository uses standard Next.js on Vercel and Supabase for database, email/password authentication and private storage. Follow README.md for one-time SQL/Auth setup and environment variables. Existing hosted data is not automatically migrated.

@@ -1,41 +1,73 @@
 # Super Snap Studio
 
-React + TypeScript photography studio website and management workspace.
+Photography website and owner/client platform built with standard Next.js, React, Supabase Database/Auth/Storage, and Square payments. Deploy this repository to Vercel. Email and password sign-in is at `/login`; the owner dashboard is `/admin`, and client galleries are at `/client`.
 
-## Run
+## 1. Create Supabase (one time)
 
-Use the package manager in pnpm-lock.yaml. Install dependencies, then run `pnpm dev`. Build with `pnpm build`. Typecheck with `pnpm exec tsc --noEmit`.
+1. Create a new project at https://supabase.com/dashboard.
+2. Open **SQL Editor → New query**, paste the entire contents of [`supabase/setup.sql`](supabase/setup.sql), and click **Run** once. This creates tables, protected database functions, and the private `studio-media` bucket. Do not run it against an existing unrelated database. API keys alone cannot create this schema.
+3. Developers using Supabase CLI can instead apply the identical migration in `supabase/migrations/` (do not apply both methods).
+4. In **Authentication → Providers → Email**, enable email/password and keep email confirmation enabled.
+5. In **Authentication → Users → Add user → Create new user**, enter the studio owner's email and a strong password (12+ characters). Enable **Auto Confirm User** for this owner you are creating. Set `OWNER_EMAIL` to exactly that address. Passwords are stored by Supabase Auth; there is no `ADMIN_PASSWORD` environment variable.
+6. Configure custom SMTP in Supabase Auth before inviting real clients or using password resets. Supabase's default mail service is restricted and is not a production email sender. Resend SMTP is one option; configuring the website's `RESEND_API_KEY` alone does not configure Supabase Auth email.
 
-## Storage and auth
+## 2. Add environment variables in Vercel
 
-The Sites manifest declares D1 DB and R2 BUCKET. The schema is in db/schema.ts; generated schema-only migrations are in drizzle/. Sites applies migrations when publishing. Private galleries authorize every request using dispatcher-authenticated user identity. The owner is selected by the server-only OWNER_EMAIL. Clients are assigned by email, then linked to stable authenticated user IDs.
+Open your Vercel project → **Settings → Environment Variables**. Use the exact variable names below, with values from the same Supabase project. Add them to Production; add Preview separately if needed.
 
-No shared admin credentials. Never trust user-controlled role fields. Media publishing is explicit at the project level. Files are limited to validated JPEG, PNG, WebP, MP4, and WebM under 25 MB.
+| Variable | Where to get the value |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project Connect dialog / Settings → API: Project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase Settings → API Keys: publishable key |
+| `SUPABASE_SECRET_KEY` | Supabase Settings → API Keys: secret key; server only |
+| `OWNER_EMAIL` | Email of the confirmed owner user created above |
+| `SITE_URL` | Final HTTPS Vercel or custom domain, e.g. `https://your-studio.vercel.app` |
 
-## Connections
+Legacy projects may use `NEXT_PUBLIC_SUPABASE_ANON_KEY` instead of the publishable key, and `SUPABASE_SERVICE_ROLE_KEY` instead of the secret key. Use one matching pair. Never put the secret/service-role key in a `NEXT_PUBLIC_` variable, client code, or GitHub. No database connection string is needed by this app.
 
-See public/setup-guide.txt and .env.example for configuration, callback URLs, and limitations. Square, Resend, and DocuSeal require credentials and acceptance testing before live use. This Site remains private until its owner explicitly changes its audience. External callbacks cannot reach an owner-private Site.
+Copy the optional Square, Resend and DocuSeal names from [`.env.example`](.env.example). Missing optional credentials disable the corresponding action with a setup message. Real payments require the studio's Square account and production credentials; see [`docs/SQUARE-SETUP.md`](docs/SQUARE-SETUP.md).
 
-## Demonstration content
+## 3. Fix Vercel build settings and deploy
 
-Six licensed photographs are credited in public/image-credits.txt. No invented client work, reviews, business statistics or prices are included.
+- Import `ZameerHP/SNAP-STUDIO-`, branch `main`.
+- Root Directory: repository root (`.`).
+- Framework Preset: **Next.js**.
+- Build Command: **`pnpm build`**.
+- Output Directory: **`.next`** (or the Next.js default; remove any old custom `dist` override).
+- Install Command: default package-manager detection / `pnpm install --frozen-lockfile`.
+- Use Node.js 22 or 24.
+- Deploy again after saving environment variables. If the old failed build was cached, redeploy without the existing build cache.
 
-## Scope and remaining setup
+`vercel.json` sets the framework, build command and output directory. The previous adapter build did not create Next.js's `.next/routes-manifest.json`; this repository now runs `next build` and produces normal Next.js output. There are no Cloudflare runtime, D1/R2, Wrangler or trusted-header login requirements.
 
-Implemented: cinematic public routes, enquiries, client/project management, persistent private media galleries, selections, download controls, public portfolio publishing, invoices/PDFs, project messaging, content editing, and provider adapters with verified callbacks.
+## 4. Finish authentication URLs
 
-Provider credentials, verified email domain, real studio portfolio and showreel, currency/tax decisions, and studio-owner handover remain to be supplied. Authentication uses ChatGPT sign-in rather than a separate password database. Outgoing emails currently require an explicit owner action; automated invitation/gallery/invoice/reminder emails are not enabled. Videos are uploaded as original files; transcoding is not included.
+In Supabase **Authentication → URL Configuration**:
 
-## Square payments
+- Site URL: the same final URL as `SITE_URL`.
+- Redirect URLs: `https://YOUR-DOMAIN/auth/callback**` and, for local testing, `http://localhost:3000/auth/callback**`.
+- Add any Preview domain you intentionally use for Auth; never use a broad production wildcard for unrelated domains.
 
-Stripe was replaced by Square. See [Square connection guide](docs/SQUARE-SETUP.md) for credentials, callbacks, seller-account ownership, and test steps. Local checks: `node --experimental-vm-modules tests/square.test.mjs`.
+Open `/admin` and sign in with the owner's email and password. Clients create an account through `/login`, confirm their email, then sign in. Add a client record with the same email in the owner dashboard and assign its projects. Unassigned clients see an empty account, not other clients' projects.
 
-## Feature and storage guide
+Default confirmation/reset links use the PKCE callback and should be opened in the browser that requested them. For cross-device links with custom SMTP/templates, the app also supports `/auth/confirm?token_hash={{ .TokenHash }}&type=signup` (confirmation), `type=recovery` (password reset), and `type=invite` (invitation). Recovery/invite links lead to the password form. Use your fixed trusted site origin for these template links.
 
-See [Features and current limitations](docs/FEATURES.md) and [Storage allowances](docs/STORAGE.md).
+## Development and validation
 
-## Hosting portability
+```sh
+pnpm install --frozen-lockfile
+cp .env.example .env.local
+# Fill your own development project keys in .env.local
+pnpm dev
+pnpm typecheck
+pnpm test
+pnpm build
+```
 
-This repository is the complete application source and static assets, not a database backup. Production client data and uploaded private media are not committed. The current deployment uses Sites' Cloudflare Worker runtime, D1, R2, and trusted ChatGPT identity headers. Merely importing this repository into Vercel will not provision storage or reproduce authentication. Do not expose the Worker directly on another host with the current header-based auth: outside the Sites dispatcher, replace it with independently verified sessions/OIDC and provision the database/storage bindings first.
+The test suite executes the actual SQL schema and functions in local PostgreSQL-compatible PGlite, verifies database access restrictions and payment idempotency, and checks auth redirect/payment/media rules. It does not connect to a real provider account. Before handover, verify owner login, a separate client login, private gallery access, upload/download, password reset, and Square Sandbox payment/refund webhooks in your deployed environment.
 
-Environment variables in `.env.example` are placeholders; actual credentials belong in hosting secrets. A local `.env` does not configure production. Deploy again after changing hosted environment variables. Keep the Site owner-private until the owner deliberately enables the audience needed for client access and provider callbacks.
+## Features and data
+
+See [`docs/FEATURES.md`](docs/FEATURES.md), [`docs/STORAGE.md`](docs/STORAGE.md), and [`docs/SQUARE-SETUP.md`](docs/SQUARE-SETUP.md). Supabase stores data independently of Vercel deployments. Redeploying the website does not recreate or erase your Supabase project.
+
+This repository contains source code and demonstration assets, not live client records or private uploaded media. Data from the previous hosted database is not automatically copied into your new Supabase project; existing records/media require a separate export/import if you have used that database. No provider credentials or production payment tests are included.

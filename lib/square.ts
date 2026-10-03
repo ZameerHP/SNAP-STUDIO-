@@ -1,4 +1,4 @@
-import { config, db, HttpError, now, one, run, uid } from './studio-server';
+import { config, db, HttpError, result, row } from './studio-server';
 import { verifiedPayment } from './square-core';
 export function squareConfig() {
   const e = config();
@@ -20,15 +20,11 @@ export async function reconcileSquarePayment(paymentId: string) {
   const { payment } = await square('payments/' + encodeURIComponent(paymentId));
   if (!payment?.order_id) return null; // Unrelated in-person payments do not belong to these invoices.
   const { order } = await square('orders/' + encodeURIComponent(payment.order_id));
-  const attempt = await one('SELECT * FROM square_checkouts WHERE id=?', String(order?.reference_id || ''));
+  const attempt = await row('square_checkouts', String(order?.reference_id || ''));
   if (!attempt) return null;
   const check = verifiedPayment(payment, attempt, order, squareConfig().location);
   if (check.completed) {
-    await db().batch([
-      db().prepare('INSERT INTO payments (id,invoice_id,provider_id,amount,currency,refunded,created_at) VALUES (?,?,?,?,?,?,?) ON CONFLICT(provider_id) DO UPDATE SET refunded=MAX(payments.refunded,excluded.refunded)').bind(uid(), attempt.invoice_id, 'square:' + payment.id, attempt.amount, attempt.currency, check.refunded, now()),
-      db().prepare("UPDATE square_checkouts SET status='paid',order_id=? WHERE id=?").bind(order.id, attempt.id),
-      db().prepare('UPDATE invoices SET checkout_id=NULL,checkout_url=NULL WHERE id=? AND checkout_id=?').bind(attempt.invoice_id, attempt.link_id),
-    ]);
+    await result(db().rpc('studio_record_square_payment', { p_attempt: attempt.id, p_payment: payment.id, p_order: order.id, p_refunded: check.refunded }));
   }
   return { ...check, status: payment.status, invoiceId: attempt.invoice_id };
 }
@@ -37,6 +33,7 @@ export async function restoreSquareLink(attempt: any) {
   // The exact persisted request and idempotency key survive a network timeout or worker restart.
   const { payment_link: link } = await square('online-checkout/payment-links', 'POST', JSON.parse(attempt.request_json));
   if (!link?.id || !link.order_id || !link.url?.startsWith('https://')) throw new HttpError('Square returned an incomplete payment link.', 502);
-  await run("UPDATE square_checkouts SET link_id=?,order_id=?,url=?,status=CASE WHEN status='paid' THEN status ELSE 'open' END WHERE id=?", link.id, link.order_id, link.url, attempt.id);
+  await result(db().from('square_checkouts').update({ link_id: link.id, order_id: link.order_id, url: link.url }).eq('id', attempt.id));
+  await result(db().from('square_checkouts').update({ status: 'open' }).eq('id', attempt.id).eq('status', 'creating'));
   return { ...attempt, link_id: link.id, order_id: link.order_id, url: link.url };
 }

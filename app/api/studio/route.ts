@@ -1,11 +1,81 @@
-import {all,body,email,failure,HttpError,identity,integer,integrations,json,log,now,one,projectAccess,run,sameOrigin,str,uid} from '@/lib/studio-server';import {sendEmail,requestSignature} from '@/lib/providers';
-export async function GET(){try{const w=await identity(),args=w.owner?[]:[w.client?.id||''],where=w.owner?'':' WHERE p.client_id=?';const projects=await all('SELECT p.*,c.name AS client_name,c.email AS client_email,(SELECT COUNT(*) FROM media m WHERE m.project_id=p.id) AS media_count FROM projects p JOIN clients c ON c.id=p.client_id'+where+' ORDER BY p.created_at DESC',...args);const ids=projects.map(p=>p.id);const scoped=(t:string)=>all('SELECT * FROM '+t+(w.owner?'':' WHERE client_id=?')+' ORDER BY created_at DESC LIMIT 200',...args);const [media,invoices,documents,messages,clients,enquiries,settings]=await Promise.all([ids.length?all('SELECT m.*,EXISTS(SELECT 1 FROM favorites f WHERE f.media_id=m.id) AS favorite FROM media m WHERE project_id IN ('+ids.map(()=>'?').join(',')+') ORDER BY position,created_at',...ids):[],all('SELECT i.*,c.name AS client_name,COALESCE((SELECT SUM(amount-refunded) FROM payments p WHERE p.invoice_id=i.id),0) AS paid,COALESCE((SELECT SUM(refunded) FROM payments p WHERE p.invoice_id=i.id),0) AS refunded FROM invoices i JOIN clients c ON c.id=i.client_id'+(w.owner?'':' WHERE i.client_id=?')+' ORDER BY i.created_at DESC',...args),scoped('documents'),scoped('messages'),w.owner?all('SELECT * FROM clients ORDER BY created_at DESC'):[],w.owner?all('SELECT * FROM enquiries ORDER BY created_at DESC LIMIT 200'):[],w.owner?all('SELECT * FROM settings'):[]]);return json({owner:w.owner,user:{name:w.user.displayName,email:w.user.email},projects,media,invoices,documents,messages,clients,enquiries,settings,integrations:integrations()})}catch(e){return failure(e)}}
-export async function POST(req:Request){try{sameOrigin(req);const w=await identity(),d=await body(req),action=str(d.action,50);let resource=uid();if(action==='favorite'){const m=await one('SELECT * FROM media WHERE id=?',str(d.id,100));if(!m)throw new HttpError('Image not found.',404);await projectAccess(m.project_id);if(w.owner||!w.client)throw new HttpError('Favorites belong to client accounts.',403);const id=w.client.id+':'+m.id;if(d.selected)await run('INSERT OR IGNORE INTO favorites VALUES (?,?,?)',id,w.client.id,m.id);else await run('DELETE FROM favorites WHERE id=? AND client_id=?',id,w.client.id);await run('UPDATE projects SET selections_submitted=0 WHERE id=?',m.project_id);return json({ok:true})}if(action==='submitSelections'){const{project}=await projectAccess(str(d.id,100));if(w.owner)throw new HttpError('Selections are submitted by clients.');await run('UPDATE projects SET selections_submitted=1 WHERE id=?',project.id);return json({ok:true})}if(action==='message'){const{project}=await projectAccess(str(d.projectId,100));await run('INSERT INTO messages (id,project_id,client_id,sender,body,status,created_at) VALUES (?,?,?,?,?,?,?)',resource,project.id,project.client_id,w.owner?'Studio':w.user.displayName,str(d.body),'received',now());return json({ok:true})}if(!w.owner)throw new HttpError('Studio owner access required.',403);
-if(action==='client'){const mail=email(d.email);if(await one('SELECT id FROM clients WHERE email=?',mail))throw new HttpError('A client with this email already exists.');await run('INSERT INTO clients (id,email,name,created_at) VALUES (?,?,?,?)',resource,mail,str(d.name,120),now())}
-else if(action==='project'){const c=await one('SELECT id FROM clients WHERE id=?',str(d.clientId,100));if(!c)throw new HttpError('Select a client.');const service=str(d.service,80),title=str(d.title,180),description=str(d.description||'',4000,false),date=str(d.date||'',20,false),status=str(d.status||'planning',30);if(!['planning','scheduled','editing','delivered'].includes(status))throw new HttpError('Invalid stage.');if(d.id){resource=str(d.id,100);if(!await one('SELECT id FROM projects WHERE id=?',resource))throw new HttpError('Project not found.',404);await run('UPDATE projects SET title=?,description=?,service=?,date=?,status=?,download_allowed=?,published=? WHERE id=?',title,description,service,date,status,d.downloadAllowed?1:0,d.published?1:0,resource)}else await run('INSERT INTO projects (id,client_id,title,description,service,date,status,download_allowed,published,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',resource,c.id,title,description,service,date,status,d.downloadAllowed?1:0,d.published?1:0,now())}
-else if(action==='enquiry'){resource=str(d.id,100);if(!['new','contacted','booked','closed'].includes(d.status))throw new HttpError('Invalid status.');await run('UPDATE enquiries SET status=? WHERE id=?',d.status,resource)}
-else if(action==='media'){resource=str(d.id,100);const m=await one('SELECT * FROM media WHERE id=?',resource);if(!m)throw new HttpError('Image not found.',404);await run('UPDATE media SET position=? WHERE id=?',integer(d.position,0,10000),resource);if(d.cover&&m.type.startsWith('image/'))await run('UPDATE projects SET cover_id=? WHERE id=?',resource,m.project_id)}
-else if(action==='invoice'){const p=await one('SELECT * FROM projects WHERE id=?',str(d.projectId,100));if(!p)throw new HttpError('Select a project.');if(!Array.isArray(d.items)||!d.items.length||d.items.length>30)throw new HttpError('Add one to thirty line items.');const items=d.items.map((i:any)=>({description:str(i.description,200),quantity:integer(i.quantity,1,1000),amount:integer(i.amount,1,10000000)}));const subtotal=integer(items.reduce((a:number,i:any)=>a+i.quantity*i.amount,0),1),tax=integer(d.taxBps||0,0,10000),total=integer(subtotal+Math.round(subtotal*tax/10000),1),currency=str(d.currency,3).toLowerCase();if(!['cad','usd','aud','gbp','eur','pkr'].includes(currency))throw new HttpError('Unsupported currency.');await run('INSERT INTO invoices (id,number,project_id,client_id,items,currency,subtotal,tax_bps,total,deposit,due,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',resource,'SS-'+new Date().getFullYear()+'-'+resource.slice(0,8).toUpperCase(),p.id,p.client_id,JSON.stringify(items),currency,subtotal,tax,total,integer(d.deposit||0,0,total),str(d.due||'',20,false),now())}
-else if(action==='email'){const c=await one('SELECT * FROM clients WHERE id=?',str(d.clientId,100));if(!c)throw new HttpError('Client not found.');const subject=str(d.subject,200),text=str(d.body);const result=await sendEmail(c.email,subject,text,resource);await run('INSERT INTO messages (id,client_id,sender,subject,body,status,provider_id,created_at) VALUES (?,?,?,?,?,?,?,?)',resource,c.id,'Studio',subject,text,'sent',result.id,now())}
-else if(action==='signature'){const p=await one('SELECT p.*,c.email,c.name FROM projects p JOIN clients c ON c.id=p.client_id WHERE p.id=?',str(d.projectId,100));if(!p)throw new HttpError('Project not found.');const title=str(d.title,180);const result=await requestSignature(integer(d.templateId,1),p.email,p.name,resource);await run('INSERT INTO documents (id,project_id,client_id,title,provider_id,sign_url,status,created_at) VALUES (?,?,?,?,?,?,?,?)',resource,p.id,p.client_id,title,String(result.submission_id),result.embed_src||('https://docuseal.com/s/'+result.slug),'sent',now())}
-else if(action==='settings'){for(const key of ['studioStatement','aboutText','contactEmail','contactPhone','instagram','facebook','videoUrl'])if(d[key]!==undefined){let v=str(d[key],4000,false);if(['instagram','facebook','videoUrl'].includes(key)&&v){let u;try{u=new URL(v)}catch{throw new HttpError('Enter a valid HTTPS link.')}if(u.protocol!=='https:')throw new HttpError('Use HTTPS links.')}if(key==='contactEmail')v=email(v);await run('INSERT INTO settings (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',key,v)}resource='website'}else throw new HttpError('Unknown action.');await log(w.user.userId,action,resource);return json({ok:true,id:resource})}catch(e){return failure(e)}}
+import { body, db, email, failure, HttpError, identity, integer, integrations, json, log, now, projectAccess, result, row, str, uid, sameOrigin, type Row } from '@/lib/studio-server';
+import { sendEmail, requestSignature } from '@/lib/providers';
+export async function GET() {
+  try {
+    const w = await identity(), cid = w.client?.id || 'unassigned';
+    const scoped = (table: string) => { let q = db().from(table).select('*'); if (!w.owner) q = q.eq('client_id', cid); return result<Row[]>(q.order('created_at', { ascending: false }).limit(500)); };
+    const [projects, invoices, documents, messages, clients, enquiries, settings] = await Promise.all([
+      scoped('projects'), scoped('invoices'), scoped('documents'), scoped('messages'),
+      w.owner ? result<Row[]>(db().from('clients').select('*').order('created_at', { ascending: false }).limit(1000)) : [],
+      w.owner ? result<Row[]>(db().from('enquiries').select('*').order('created_at', { ascending: false }).limit(200)) : [],
+      w.owner ? result<Row[]>(db().from('settings').select('*')) : [],
+    ]);
+    const ids = projects.map(p => p.id), invoiceIds = invoices.map(i => i.id);
+    const [media, favorites, payments] = await Promise.all([
+      ids.length ? result<Row[]>(db().from('media').select('id,project_id,name,type,size,position,created_at').in('project_id', ids).order('position').order('created_at').limit(1000)) : [],
+      w.owner ? result<Row[]>(db().from('favorites').select('media_id').limit(10000)) : result<Row[]>(db().from('favorites').select('media_id').eq('client_id', cid).limit(10000)),
+      invoiceIds.length ? result<Row[]>(db().from('payments').select('invoice_id,amount,refunded').in('invoice_id', invoiceIds).limit(10000)) : [],
+    ]);
+    const clientMap = new Map(clients.map(c => [c.id, c]));
+    const safeInvoices = invoices.map(i => {
+      const p = payments.filter(p => p.invoice_id === i.id);
+      const { checkout_id, checkout_url, checkout_lock, checkout_expires, ...safe } = i;
+      return { ...safe, client_name: clientMap.get(i.client_id)?.name, paid: p.reduce((n, p) => n + p.amount - p.refunded, 0), refunded: p.reduce((n, p) => n + p.refunded, 0) };
+    });
+    return json({ owner: w.owner, user: { name: w.user.displayName, email: w.user.email }, projects: projects.map(p => ({ ...p, client_name: clientMap.get(p.client_id)?.name, media_count: media.filter(m => m.project_id === p.id).length })), media: media.map(m => ({ ...m, favorite: favorites.some(f => f.media_id === m.id) })), invoices: safeInvoices, documents, messages, clients, enquiries, settings, integrations: integrations() });
+  } catch (e) { return failure(e); }
+}
+export async function POST(req: Request) {
+  try {
+    sameOrigin(req); const w = await identity(), d = await body(req), action = str(d.action, 50); let resource = uid();
+    if (action === 'favorite') {
+      const m = await row('media', str(d.id, 100)); if (!m) throw new HttpError('Image not found.', 404);
+      await projectAccess(m.project_id); if (w.owner || !w.client) throw new HttpError('Favourites belong to client accounts.', 403);
+      await result(db().rpc('studio_favorite', { p_client: w.client.id, p_media: m.id, p_selected: d.selected === true })); return json({ ok: true });
+    }
+    if (action === 'submitSelections') { const { project } = await projectAccess(str(d.id, 100)); if (w.owner) throw new HttpError('Selections are submitted by clients.'); await result(db().from('projects').update({ selections_submitted: 1 }).eq('id', project.id)); return json({ ok: true }); }
+    if (action === 'message') { const { project } = await projectAccess(str(d.projectId, 100)); await result(db().from('messages').insert({ id: resource, project_id: project.id, client_id: project.client_id, sender: w.owner ? 'Studio' : w.user.displayName, body: str(d.body), status: 'received', created_at: now() })); return json({ ok: true }); }
+    if (!w.owner) throw new HttpError('Studio owner access required.', 403);
+    if (action === 'client') {
+      const mail = email(d.email); const existing = await result(db().from('clients').select('id').eq('email', mail).maybeSingle()); if (existing) throw new HttpError('A client with this email already exists.');
+      await result(db().from('clients').insert({ id: resource, email: mail, name: str(d.name, 120), created_at: now() }));
+    } else if (action === 'project') {
+      const c = await row('clients', str(d.clientId, 100)); if (!c) throw new HttpError('Select a client.');
+      const service = str(d.service, 80), status = str(d.status || 'planning', 30);
+      if (!['Photography','Videography','Live Streaming','Passport Photos'].includes(service) || !['planning','scheduled','editing','delivered'].includes(status)) throw new HttpError('Invalid service or stage.');
+      const values = { title: str(d.title, 180), description: str(d.description || '', 4000, false), service, date: str(d.date || '', 20, false), status, download_allowed: d.downloadAllowed ? 1 : 0, published: d.published ? 1 : 0 };
+      if (d.id) { resource = str(d.id, 100); const previous = await row('projects', resource); if (!previous) throw new HttpError('Project not found.', 404); if (previous.client_id !== c.id) throw new HttpError('Create a separate project to assign work to another client.'); await result(db().from('projects').update(values).eq('id', resource)); }
+      else await result(db().from('projects').insert({ ...values, id: resource, client_id: c.id, created_at: now() }));
+    } else if (action === 'enquiry') {
+      resource = str(d.id, 100); if (!['new','contacted','booked','closed'].includes(d.status)) throw new HttpError('Invalid status.'); await result(db().from('enquiries').update({ status: d.status }).eq('id', resource));
+    } else if (action === 'media') {
+      resource = str(d.id, 100); const m = await row('media', resource); if (!m) throw new HttpError('Image not found.', 404);
+      await result(db().from('media').update({ position: integer(d.position, 0, 10000) }).eq('id', resource));
+      if (d.cover && m.type.startsWith('image/')) await result(db().from('projects').update({ cover_id: resource }).eq('id', m.project_id));
+    } else if (action === 'invoice') {
+      const p = await row('projects', str(d.projectId, 100)); if (!p) throw new HttpError('Select a project.');
+      if (!Array.isArray(d.items) || !d.items.length || d.items.length > 30) throw new HttpError('Add one to thirty line items.');
+      const items = d.items.map((i: any) => ({ description: str(i.description, 200), quantity: integer(i.quantity, 1, 1000), amount: integer(i.amount, 1, 10000000) }));
+      const subtotal = integer(items.reduce((a: number, i: any) => a + i.quantity * i.amount, 0), 1), tax = integer(d.taxBps || 0, 0, 10000), total = integer(subtotal + Math.round(subtotal * tax / 10000), 1), currency = str(d.currency, 3).toLowerCase();
+      if (!['cad','usd','aud','gbp','eur','pkr'].includes(currency)) throw new HttpError('Unsupported currency.');
+      await result(db().from('invoices').insert({ id: resource, number: 'SS-' + new Date().getFullYear() + '-' + resource.slice(0, 8).toUpperCase(), project_id: p.id, client_id: p.client_id, items: JSON.stringify(items), currency, subtotal, tax_bps: tax, total, deposit: integer(d.deposit || 0, 0, total), due: str(d.due || '', 20, false), created_at: now() }));
+    } else if (action === 'email') {
+      const c = await row('clients', str(d.clientId, 100)); if (!c) throw new HttpError('Client not found.');
+      const subject = str(d.subject, 200), text = str(d.body), sent = await sendEmail(c.email, subject, text, resource);
+      await result(db().from('messages').insert({ id: resource, client_id: c.id, sender: 'Studio', subject, body: text, status: 'sent', provider_id: sent.id, created_at: now() }));
+    } else if (action === 'signature') {
+      const p = await row('projects', str(d.projectId, 100)); if (!p) throw new HttpError('Project not found.'); const c = await row('clients', p.client_id); if (!c) throw new HttpError('Client not found.');
+      const title = str(d.title, 180), sent = await requestSignature(integer(d.templateId, 1), c.email, c.name, resource);
+      await result(db().from('documents').insert({ id: resource, project_id: p.id, client_id: p.client_id, title, provider_id: String(sent.submission_id), sign_url: sent.embed_src || ('https://docuseal.com/s/' + sent.slug), status: 'sent', created_at: now() }));
+    } else if (action === 'settings') {
+      const settings = [];
+      for (const key of ['studioStatement','aboutText','contactEmail','contactPhone','instagram','facebook','videoUrl']) if (d[key] !== undefined) {
+        let value = str(d[key], 4000, false);
+        if (['instagram','facebook','videoUrl'].includes(key) && value) { let u; try { u = new URL(value); } catch { throw new HttpError('Enter a valid HTTPS link.'); } if (u.protocol !== 'https:') throw new HttpError('Use HTTPS links.'); }
+        if (key === 'contactEmail') value = email(value); settings.push({ key, value });
+      }
+      if (settings.length) await result(db().from('settings').upsert(settings)); resource = 'website';
+    } else throw new HttpError('Unknown action.');
+    await log(w.user.userId, action, resource); return json({ ok: true, id: resource });
+  } catch (e) { return failure(e); }
+}

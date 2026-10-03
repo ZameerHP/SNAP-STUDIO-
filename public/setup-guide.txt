@@ -2,17 +2,21 @@ SUPER SNAP STUDIO — CONNECTION GUIDE
 
 Implemented: React/TypeScript public website, GSAP/Lenis scroll scenes, persistent enquiries, owner/client authorization, client assignments, private media uploads, image/video galleries, favorites/selections, download permissions, explicit public publishing, project messages, invoices and PDF download, configurable content.
 
-Sign-in: This version uses ChatGPT sign-in. Clients must use the exact email that the owner assigned to their client record. User IDs are linked on first verified sign-in. There is no shared administrator password. The owner is selected by the server-only OWNER_EMAIL environment variable. The initial owner is the site creator. Set OWNER_EMAIL to the studio owner before handover.
+Sign-in: Supabase email/password. Create a confirmed owner user in Supabase Authentication > Users and set OWNER_EMAIL to that email. /admin opens the owner panel. Clients sign up at /login, confirm their email, and use /client. Their email must match the client record assigned by the studio.
 
-This Site is initially private to its creator. Before inviting clients, explicitly set its audience using Sites sharing settings. Client roles still require an assignment by the studio. The private audience also prevents external providers from reaching webhooks; public access must be deliberately enabled before those integrations can go live.
+SETUP
+Run supabase/setup.sql once in a new Supabase project's SQL Editor. It creates the tables and private studio-media bucket. Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY, SUPABASE_SECRET_KEY, OWNER_EMAIL and SITE_URL in Vercel Settings > Environment Variables. Keep the secret key server-only. Configure Supabase Auth Site URL, callback redirect allowlist and custom SMTP. Full instructions are in README.md.
+
+VERCEL
+Framework: Next.js. Build: pnpm build. Output: .next. Root: repository root. Redeploy after saving keys. Database records and media stay in Supabase across redeployments.
 
 STORAGE
-D1 DB owns records. R2 BUCKET owns original image and video bytes. Migrations are in drizzle/. No client media is public until its project is explicitly published. Every private media request is authorized on the server. Downloads cannot prevent screenshots. Uploads accept JPEG, PNG, WebP, MP4, WebM, at most 25 MB per file.
+Supabase Postgres stores records; Supabase private Storage holds originals. Uploads go directly to signed storage URLs to support files above Vercel's request-body limit. JPEG, PNG, WebP, MP4 and WebM are supported, up to 25 MB each. Private access is checked before issuing a five-minute viewing URL. Downloads cannot prevent screenshots or saving viewable images.
 
 PAYMENTS — SQUARE (credentials not connected)
 Stripe checkout has been removed. Payments use a Square-hosted checkout page and settle to the studio seller account connected by its Square access token and location.
 
-Set the following in Sites production runtime environment variables (server-only):
+Set the following in Vercel production environment variables (server-only):
 SQUARE_ENVIRONMENT=sandbox or production
 SQUARE_ACCESS_TOKEN=the matching Square application access token (secret)
 SQUARE_LOCATION_ID=the studio's active, card-processing-enabled Square location
@@ -52,4 +56,4 @@ https://resend.com/docs/webhooks/verify-webhooks-requests
 https://www.docuseal.com/docs/api
 https://www.docuseal.com/resources/use-webhooks
 
-Before live client use: connect providers, confirm business currency/taxes, set studio owner, share the site appropriately, and complete live/test-provider acceptance checks. Provider end-to-end tests cannot run without account credentials.
+Before live client use: connect providers, confirm business currency/taxes, set studio owner, configure Supabase Auth URLs and SMTP, and complete live/test-provider acceptance checks. Provider end-to-end tests cannot run without account credentials.

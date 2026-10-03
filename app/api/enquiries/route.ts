@@ -1,2 +1,14 @@
-import {body,email,failure,HttpError,json,now,one,run,sameOrigin,str,uid} from '@/lib/studio-server';
-export async function POST(req:Request){try{sameOrigin(req);const d=await body(req);if(d.website)return json({ok:true});const name=str(d.name,120),mail=email(d.email),service=str(d.service,80),details=str(d.details,4000);if(!['Photography','Videography','Live Streaming','Passport Photos'].includes(service))throw new HttpError('Choose a service.');const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(req.headers.get('cf-connecting-ip')||'unknown'));const hash=Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');const count=await one('SELECT COUNT(*) AS n FROM enquiries WHERE ip_hash=? AND created_at>?',hash,now()-3600000);if(Number(count?.n)>=10)throw new HttpError('Too many requests. Please phone the studio or try again later.',429);const date=str(d.date||'',20,false);if(date&&!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new HttpError('Check your preferred date.');await run('INSERT INTO enquiries (id,name,email,phone,service,date,location,details,ip_hash,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)',uid(),name,mail,str(d.phone||'',40,false),service,date,str(d.location||'',250,false),details,hash,now());return json({ok:true})}catch(e){return failure(e)}}
+import { body, db, email, failure, HttpError, json, now, result, sameOrigin, str, uid } from '@/lib/studio-server';
+export async function POST(req: Request) {
+  try {
+    sameOrigin(req); const d = await body(req); if (d.website) return json({ ok: true });
+    const service = str(d.service, 80); if (!['Photography','Videography','Live Streaming','Passport Photos'].includes(service)) throw new HttpError('Choose a service.');
+    const ip = process.env.VERCEL ? req.headers.get('x-vercel-forwarded-for') || 'unknown' : 'local';
+    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(ip)), hash = Array.from(new Uint8Array(bytes), b => b.toString(16).padStart(2, '0')).join('');
+    const allowed = await result<boolean>(db().rpc('studio_rate_limit', { p_key: 'enquiry:' + hash, p_limit: 10, p_window: 3600000 }));
+    if (!allowed) throw new HttpError('Too many requests. Please phone the studio or try again later.', 429);
+    const date = str(d.date || '', 20, false); if (date && !/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new HttpError('Check your preferred date.');
+    await result(db().from('enquiries').insert({ id: uid(), name: str(d.name, 120), email: email(d.email), phone: str(d.phone || '', 40, false), service, date, location: str(d.location || '', 250, false), details: str(d.details, 4000), ip_hash: hash, created_at: now() }));
+    return json({ ok: true });
+  } catch (e) { return failure(e); }
+}
