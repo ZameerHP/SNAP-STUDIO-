@@ -13,7 +13,7 @@ export async function result<T = any>(query: PromiseLike<{ data: T | null; error
   return data as T;
 }
 export const row = (table: string, id: string) => result<Row | null>(db().from(table).select('*').eq('id', id).maybeSingle());
-export const isOwner = (email: string) => ownerEmailMatches(email, config().OWNER_EMAIL);
+export const isOwner = (email: string) => ownerEmailMatches(email, config().OWNER_EMAIL, config().ADMIN_EMAIL);
 export async function identity(ownerOnly = false) {
   const user = await getStudioUser();
   if (!user) throw new HttpError('Please sign in to continue.', 401);
