@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       await result(db().from('messages').insert({ id: resource, client_id: c.id, sender: 'Studio', subject, body: text, status: 'sent', provider_id: sent.id, created_at: now() }));
     } else if (action === 'signature') {
       const p = await row('projects', str(d.projectId, 100)); if (!p) throw new HttpError('Project not found.'); const c = await row('clients', p.client_id); if (!c) throw new HttpError('Client not found.');
-      const title = str(d.title, 180), sent = await requestSignature(integer(d.templateId, 1), c.email, c.name, resource);
+      const title = str(d.title, 180), sent = await requestSignature(integer(d.templateId, 1), c.email, c.name, resource, str(d.signerRole || 'First Party', 120));
       await result(db().from('documents').insert({ id: resource, project_id: p.id, client_id: p.client_id, title, provider_id: String(sent.submission_id), sign_url: sent.embed_src || ('https://docuseal.com/s/' + sent.slug), status: 'sent', created_at: now() }));
     } else if (action === 'settings') {
       const settings = [];
