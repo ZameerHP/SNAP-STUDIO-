@@ -33,6 +33,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     if (error || !data.user?.email_confirmed_at) throw new HttpError('Email or password is incorrect, or your email still needs confirmation.', error?.status === 429 ? 429 : 401);
     const owner = isOwner(data.user.email || '');
     const next = safeNext(input.next, owner ? '/admin' : '/client');
-    return json({ ok: true, next: !owner && next.startsWith('/admin') ? '/client' : next });
+    if (!owner && next.startsWith('/admin')) {
+      await auth.auth.signOut();
+      throw new HttpError('Studio access needs the owner email and password.', 403);
+    }
+    return json({ ok: true, next });
   } catch (e) { return failure(e); }
 }
