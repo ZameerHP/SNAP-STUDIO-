@@ -1,5 +1,6 @@
 import { body, db, email, failure, HttpError, identity, integer, integrations, json, log, now, projectAccess, result, row, str, uid, sameOrigin, type Row } from '@/lib/studio-server';
 import { sendEmail, requestSignature, notifyStudio } from '@/lib/providers';
+import { MEDIA_BUCKET } from '@/lib/supabase/admin';
 export async function GET() {
   try {
     const w = await identity(), cid = w.client?.id || 'unassigned';
@@ -42,6 +43,35 @@ export async function POST(req: Request) {
       return json({ ok: true });
     }
     if (!w.owner) throw new HttpError('Studio owner access required.', 403);
+    if (action === 'delete') {
+      const kind = str(d.kind, 30), id = str(d.id, 100);
+      if (d.confirm !== 'DELETE' || !['enquiry','client','project','media','invoice','document','message'].includes(kind)) throw new HttpError('Type DELETE to confirm.');
+      const tables: Record<string,string> = { enquiry:'enquiries', client:'clients', project:'projects', media:'media', invoice:'invoices', document:'documents', message:'messages' };
+      const table = tables[kind], target = await row(table, id);
+      if (!target) throw new HttpError('This item no longer exists. Refresh the page.', 404);
+      const has = async (name:string, column:string, value:string) => (await result<Row[]>(db().from(name).select('id').eq(column,value).limit(1))).length > 0;
+      if (kind === 'client' && (await has('projects','client_id',id) || await has('invoices','client_id',id) || await has('documents','client_id',id) || await has('messages','client_id',id))) throw new HttpError('Delete this client’s projects, invoices, documents and messages first.', 409);
+      if (kind === 'project' && (await has('media','project_id',id) || await has('invoices','project_id',id) || await has('documents','project_id',id) || await has('messages','project_id',id))) throw new HttpError('Delete this project’s photos, invoices, documents and messages first.', 409);
+      if (kind === 'invoice' && (await has('payments','invoice_id',id) || await has('square_checkouts','invoice_id',id))) throw new HttpError('This invoice has a Square checkout or payment record. Keep it for your payment records.', 409);
+      if (kind === 'media') {
+        await result(db().from('favorites').delete().eq('media_id', id));
+        await result(db().from('projects').update({ cover_id: null }).eq('cover_id', id));
+        const { error } = await db().storage.from(MEDIA_BUCKET).remove([target.key]);
+        if (error) throw new HttpError('Storage could not delete this file. Retry before removing its gallery record.', 503);
+      }
+      if (kind === 'client') await result(db().from('favorites').delete().eq('client_id',id));
+      if (kind === 'project') {
+        const pending = await result<Row[]>(db().from('uploads_pending').select('id,key').eq('project_id',id));
+        if (pending.length) {
+          const { error } = await db().storage.from(MEDIA_BUCKET).remove(pending.map(p=>p.key));
+          if (error) throw new HttpError('Could not remove an unfinished upload. Retry the project deletion.',503);
+          await result(db().from('uploads_pending').delete().eq('project_id',id));
+        }
+      }
+      await result(db().from(table).delete().eq('id',id));
+      await log(w.user.userId, 'delete_' + kind, id);
+      return json({ ok:true, id });
+    }
     if (action === 'client') {
       const mail = email(d.email); const existing = await result(db().from('clients').select('id').eq('email', mail).maybeSingle()); if (existing) throw new HttpError('A client with this email already exists.');
       await result(db().from('clients').insert({ id: resource, email: mail, name: str(d.name, 120), created_at: now() }));
