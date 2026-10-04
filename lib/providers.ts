@@ -13,10 +13,11 @@ async function providerMessage(response: Response) {
 export async function sendEmail(to: string, subject: string, text: string, id: string) {
   if (!integrations().email) throw new HttpError('Email is awaiting connection. Configure a verified sender and Resend API key.', 503);
   const e = config();
+  const ownerCopy = e.STUDIO_NOTIFICATION_EMAIL?.trim();
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + e.RESEND_API_KEY, 'Content-Type': 'application/json', 'Idempotency-Key': id },
-    body: JSON.stringify({ from: e.EMAIL_FROM, to: [to], reply_to: 'supersnapstudio@gmail.com', subject, text }),
+    body: JSON.stringify({ from: e.EMAIL_FROM, to: [to], bcc: ownerCopy && ownerCopy.toLowerCase() !== to.toLowerCase() ? [ownerCopy] : undefined, reply_to: 'supersnapstudio@gmail.com', subject, text }),
   });
   if (!response.ok) {
     const detail = await providerMessage(response);
