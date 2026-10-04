@@ -44,7 +44,7 @@ Allowed uploads: JPEG, PNG, WebP, MP4, WebM, up to 25 MB each. No transcoding, t
 - Square: checkout/payment/refund adapter implemented; credentials and Sandbox/live acceptance tests outstanding. No Stripe checkout remains.
 - Resend: manual outgoing email, receiving/delivery webhook adapter implemented; API key, verified sender domain, receiving configuration and tests outstanding. This is not a Gmail inbox integration.
 - DocuSeal: template-based signing adapter implemented; API key, HMAC secret, template and tests outstanding.
-- Owner email notifications for new enquiries, client messages, Square payments/refunds, signed documents, and incoming Resend email require `STUDIO_NOTIFICATION_EMAIL`, `RESEND_API_KEY`, and a verified `EMAIL_FROM`. Notification failure is logged and never undoes the saved event; the dashboard remains the source of record. Automatic client invitation, invoice, gallery-ready, and reminder emails are not implemented.
+- Owner email notifications for new enquiries, client messages, Square payments/refunds, signed documents, and incoming Resend email require `STUDIO_NOTIFICATION_EMAIL`, `RESEND_API_KEY`, and a verified `EMAIL_FROM`. Manual outgoing client emails copy the owner with BCC. Notification failure is logged and never undoes the saved event; the dashboard remains the source of record. Automatic client invitation, invoice, gallery-ready, and reminder emails are not implemented.
 - Live Streaming is a service offered by the studio, not a streaming/video-call platform implemented inside this website.
 - Passport Photos is a service enquiry, not an automated passport-photo crop/compliance checker.
 - Vercel deployment protection must allow the production webhook URLs to be reached by the configured providers.
