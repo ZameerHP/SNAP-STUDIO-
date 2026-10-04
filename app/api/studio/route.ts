@@ -1,6 +1,7 @@
 import { body, db, email, failure, HttpError, identity, integer, integrations, json, log, now, projectAccess, result, row, str, uid, sameOrigin, type Row } from '@/lib/studio-server';
 import { sendEmail, requestSignature, notifyStudio } from '@/lib/providers';
 import { MEDIA_BUCKET } from '@/lib/supabase/admin';
+import { reconcileSquarePayment, restoreSquareLink, square } from '@/lib/square';
 export async function GET() {
   try {
     const w = await identity(), cid = w.client?.id || 'unassigned';
@@ -52,7 +53,41 @@ export async function POST(req: Request) {
       const has = async (name:string, column:string, value:string) => (await result<Row[]>(db().from(name).select('id').eq(column,value).limit(1))).length > 0;
       if (kind === 'client' && (await has('projects','client_id',id) || await has('invoices','client_id',id) || await has('documents','client_id',id) || await has('messages','client_id',id))) throw new HttpError('Delete this client’s projects, invoices, documents and messages first.', 409);
       if (kind === 'project' && (await has('media','project_id',id) || await has('invoices','project_id',id) || await has('documents','project_id',id) || await has('messages','project_id',id))) throw new HttpError('Delete this project’s photos, invoices, documents and messages first.', 409);
-      if (kind === 'invoice' && (await has('payments','invoice_id',id) || await has('square_checkouts','invoice_id',id))) throw new HttpError('This invoice has a Square checkout or payment record. Keep it for your payment records.', 409);
+      if (kind === 'invoice') {
+        // Serialize against new checkout creation; the payment FK also prevents a late webhook
+        // from silently deleting a financial record after the final payment check.
+        const lock = uid();
+        const acquired = await result<boolean>(db().rpc('studio_acquire_checkout', { p_invoice:id, p_lock:lock, p_now:now(), p_expires:now()+120000 }));
+        if (!acquired) throw new HttpError('A Square checkout is being prepared. Try again shortly.',409);
+        try {
+          if (await has('payments','invoice_id',id)) throw new HttpError('This invoice has a payment or refund. Keep it for your financial records.',409);
+          const attempts = await result<Row[]>(db().from('square_checkouts').select('*').eq('invoice_id',id).order('created_at'));
+          for (let attempt of attempts) {
+            if (attempt.status === 'paid') throw new HttpError('Square marked this invoice as paid. Keep it for your financial records.',409);
+            if (attempt.status === 'creating' && !attempt.link_id) attempt = await restoreSquareLink(attempt);
+            if (attempt.order_id) {
+              const { order } = await square('orders/' + encodeURIComponent(attempt.order_id));
+              if (!order) throw new HttpError('Could not verify the Square order. Please retry.',502);
+              for (const tender of order.tenders || []) {
+                const payment = await reconcileSquarePayment(tender.payment_id || tender.id);
+                if (payment && (payment.completed || ['APPROVED','PENDING'].includes(payment.status))) throw new HttpError('Square has a payment or pending payment for this invoice. Keep it for your financial records.',409);
+              }
+              if (order.state === 'COMPLETED') throw new HttpError('Square completed this order. Keep the invoice for your records.',409);
+              if (order.state !== 'CANCELED' && attempt.link_id) await square('online-checkout/payment-links/' + encodeURIComponent(attempt.link_id),'DELETE');
+              else if (order.state !== 'CANCELED') throw new HttpError('Could not cancel the Square checkout. Retry later.',409);
+            } else if (attempt.link_id) {
+              throw new HttpError('Square checkout order is missing. Retry later.',409);
+            }
+          }
+          if (await has('payments','invoice_id',id)) throw new HttpError('A payment arrived while deleting. The invoice was kept.',409);
+          await result(db().from('square_checkouts').delete().eq('invoice_id',id));
+          await result(db().from('invoices').delete().eq('id',id));
+        } finally {
+          await result(db().from('invoices').update({ checkout_lock:null }).eq('id',id).eq('checkout_lock',lock)).catch(()=>{});
+        }
+        await log(w.user.userId,'delete_invoice',id);
+        return json({ok:true,id});
+      }
       if (kind === 'media') {
         await result(db().from('favorites').delete().eq('media_id', id));
         await result(db().from('projects').update({ cover_id: null }).eq('cover_id', id));
