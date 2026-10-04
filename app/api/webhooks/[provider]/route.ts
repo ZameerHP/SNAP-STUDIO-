@@ -1,7 +1,7 @@
 import { squareSignature } from '@/lib/square-core';
 import { squareConfig, reconcileSquarePayment } from '@/lib/square';
 import { config, db, failure, HttpError, json, now, row, result, uid } from '@/lib/studio-server';
-import { equal, hmac } from '@/lib/providers';
+import { equal, hmac, notifyStudio } from '@/lib/providers';
 const recordEvent = (id: string, provider: string) => result(db().from('events').upsert({ id, provider, created_at: now() }, { onConflict: 'id', ignoreDuplicates: true }));
 export async function POST(req: Request, { params }: { params: Promise<{ provider: string }> }) {
   try {
@@ -34,6 +34,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
       const s: any = await r.json(), status = s.status || (s.completed_at ? 'completed' : 'sent');
       const safe = (v: unknown) => typeof v === 'string' && v.startsWith('https://') ? v : null;
       await result(db().from('documents').update({ status, completed_url: status === 'completed' ? safe(s.combined_document_url || s.submitters?.[0]?.documents?.[0]?.url) : null, audit_url: status === 'completed' ? safe(s.audit_log_url) : null }).eq('id', doc.id));
+      if (status === 'completed' && doc.status !== 'completed') {
+        const [client, project] = await Promise.all([row('clients', doc.client_id), row('projects', doc.project_id)]);
+        await notifyStudio('Document signed · ' + doc.title, `Client: ${client?.name || 'Unknown'} (${client?.email || 'No email'})\nProject: ${project?.title || 'Unknown'}\nDocument: ${doc.title}\n\nOpen ${e.SITE_URL || 'your website'}/admin to view the signed document.`, 'studio-signature-' + doc.id);
+      }
       return json({ ok: true });
     }
     if (provider === 'resend') {
@@ -52,6 +56,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
         const m: any = await r.json(), from = String(m.from || event.data.from), sender = (from.match(/<([^>]+)>/)?.[1] || from).trim().toLowerCase();
         const client = await result<any>(db().from('clients').select('id').eq('email', sender).maybeSingle());
         await result(db().from('messages').upsert({ id: uid(), client_id: client?.id || null, sender: from, subject: String(m.subject || '').slice(0, 200), body: String(m.text || 'No plain text body. Read this email in the provider inbox.').slice(0, 20000), status: 'received', provider_id: event.data.email_id, created_at: now() }, { onConflict: 'provider_id', ignoreDuplicates: true }));
+        if (sender !== String(e.STUDIO_NOTIFICATION_EMAIL || '').toLowerCase()) await notifyStudio('Incoming studio email · ' + String(m.subject || 'No subject').slice(0, 120), `From: ${from}\nSubject: ${String(m.subject || 'No subject').slice(0, 200)}\n\n${String(m.text || 'Open the studio dashboard to read this message.').slice(0, 4000)}\n\nOpen ${e.SITE_URL || 'your website'}/admin for details.`, 'studio-incoming-' + event.data.email_id);
       } else {
         await result(db().from('messages').update({ status: String(event.type).replace('email.', '') }).eq('provider_id', String(event.data?.email_id || '')));
       }

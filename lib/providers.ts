@@ -25,6 +25,17 @@ export async function sendEmail(to: string, subject: string, text: string, id: s
   return response.json() as Promise<{ id: string }>;
 }
 
+/** Owner alerts should not undo a saved enquiry, message, payment, or signature. */
+export async function notifyStudio(subject: string, text: string, id: string) {
+  const to = config().STUDIO_NOTIFICATION_EMAIL;
+  if (!to || !integrations().email) return;
+  try {
+    await sendEmail(to, subject, text, id);
+  } catch (error) {
+    console.error('Studio email notification failed', error instanceof Error ? error.message : 'Unknown provider error');
+  }
+}
+
 export async function requestSignature(templateId: number, email: string, name: string, id: string, role: string) {
   if (!integrations().signatures) throw new HttpError('Document signing is awaiting connection.', 503);
   const response = await fetch('https://api.docuseal.com/submissions', {

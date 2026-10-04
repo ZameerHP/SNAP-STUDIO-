@@ -1,5 +1,5 @@
 import { body, db, email, failure, HttpError, identity, integer, integrations, json, log, now, projectAccess, result, row, str, uid, sameOrigin, type Row } from '@/lib/studio-server';
-import { sendEmail, requestSignature } from '@/lib/providers';
+import { sendEmail, requestSignature, notifyStudio } from '@/lib/providers';
 export async function GET() {
   try {
     const w = await identity(), cid = w.client?.id || 'unassigned';
@@ -34,7 +34,13 @@ export async function POST(req: Request) {
       await result(db().rpc('studio_favorite', { p_client: w.client.id, p_media: m.id, p_selected: d.selected === true })); return json({ ok: true });
     }
     if (action === 'submitSelections') { const { project } = await projectAccess(str(d.id, 100)); if (w.owner) throw new HttpError('Selections are submitted by clients.'); await result(db().from('projects').update({ selections_submitted: 1 }).eq('id', project.id)); return json({ ok: true }); }
-    if (action === 'message') { const { project } = await projectAccess(str(d.projectId, 100)); await result(db().from('messages').insert({ id: resource, project_id: project.id, client_id: project.client_id, sender: w.owner ? 'Studio' : w.user.displayName, body: str(d.body), status: 'received', created_at: now() })); return json({ ok: true }); }
+    if (action === 'message') {
+      const { project } = await projectAccess(str(d.projectId, 100));
+      const message = str(d.body);
+      await result(db().from('messages').insert({ id: resource, project_id: project.id, client_id: project.client_id, sender: w.owner ? 'Studio' : w.user.displayName, body: message, status: 'received', created_at: now() }));
+      if (!w.owner) await notifyStudio('New client message · ' + project.title, `Client: ${w.user.displayName} (${w.user.email})\nProject: ${project.title}\n\n${message}\n\nOpen ${process.env.SITE_URL || 'your website'}/admin to reply.`, 'studio-message-' + resource);
+      return json({ ok: true });
+    }
     if (!w.owner) throw new HttpError('Studio owner access required.', 403);
     if (action === 'client') {
       const mail = email(d.email); const existing = await result(db().from('clients').select('id').eq('email', mail).maybeSingle()); if (existing) throw new HttpError('A client with this email already exists.');

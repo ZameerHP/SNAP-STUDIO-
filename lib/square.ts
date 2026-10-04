@@ -1,5 +1,6 @@
 import { config, db, HttpError, result, row } from './studio-server';
 import { verifiedPayment } from './square-core';
+import { notifyStudio } from './providers';
 export function squareConfig() {
   const e = config();
   if (!e.SQUARE_ACCESS_TOKEN || !e.SQUARE_LOCATION_ID || !e.SQUARE_WEBHOOK_SIGNATURE_KEY || !e.SQUARE_WEBHOOK_URL || !e.SITE_URL || !['sandbox', 'production'].includes(e.SQUARE_ENVIRONMENT || '')) throw new HttpError('Square payments are awaiting connection. Contact the studio to arrange payment.', 503);
@@ -24,7 +25,19 @@ export async function reconcileSquarePayment(paymentId: string) {
   if (!attempt) return null;
   const check = verifiedPayment(payment, attempt, order, squareConfig().location);
   if (check.completed) {
+    const before = await result<any>(db().from('payments').select('amount,refunded').eq('provider_id', payment.id).maybeSingle());
     await result(db().rpc('studio_record_square_payment', { p_attempt: attempt.id, p_payment: payment.id, p_order: order.id, p_refunded: check.refunded }));
+    const after = await result<any>(db().from('payments').select('amount,refunded').eq('provider_id', payment.id).maybeSingle());
+    if (after && (!before || after.refunded > before.refunded)) {
+      const invoice = await row('invoices', attempt.invoice_id);
+      if (invoice) {
+        const [client, project] = await Promise.all([row('clients', invoice.client_id), row('projects', invoice.project_id)]);
+        const context = `Client: ${client?.name || 'Unknown'} (${client?.email || 'No email'})\nProject: ${project?.title || 'Unknown'}\nInvoice: ${invoice.number}\n`;
+        const money = (amount: number) => `${attempt.currency.toUpperCase()} ${(amount / 100).toFixed(2)}`;
+        if (!before) await notifyStudio('Square payment received · ' + invoice.number, context + `Payment: ${money(after.amount)}\n\nOpen ${config().SITE_URL || 'your website'}/admin to view the invoice.`, 'studio-payment-' + payment.id);
+        if (after.refunded > (before?.refunded || 0)) await notifyStudio('Square refund · ' + invoice.number, context + `Total refunded: ${money(after.refunded)}\n\nOpen ${config().SITE_URL || 'your website'}/admin to view the invoice.`, 'studio-refund-' + payment.id + '-' + after.refunded);
+      }
+    }
   }
   return { ...check, status: payment.status, invoiceId: attempt.invoice_id };
 }
