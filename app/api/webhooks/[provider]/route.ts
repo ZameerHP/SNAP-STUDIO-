@@ -32,11 +32,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ provide
       const r = await fetch('https://api.docuseal.com/submissions/' + encodeURIComponent(id), { headers: { 'X-Auth-Token': e.DOCUSEAL_API_KEY } });
       if (!r.ok) throw new HttpError('Provider unavailable.', 502);
       const s: any = await r.json(), status = s.status || (s.completed_at ? 'completed' : 'sent');
-      const safe = (v: unknown) => typeof v === 'string' && v.startsWith('https://') ? v : null;
-      await result(db().from('documents').update({ status, completed_url: status === 'completed' ? safe(s.combined_document_url || s.submitters?.[0]?.documents?.[0]?.url) : null, audit_url: status === 'completed' ? safe(s.audit_log_url) : null }).eq('id', doc.id));
+      const safe = (v: unknown) => { try { const url = new URL(String(v)); return url.protocol === 'https:' ? url.href : null; } catch { return null; } };
+      const completedUrl = status === 'completed' ? safe(s.combined_document_url || s.submitters?.[0]?.documents?.[0]?.url) : null;
+      const auditUrl = status === 'completed' ? safe(s.audit_log_url) : null;
+      await result(db().from('documents').update({ status, completed_url: completedUrl, audit_url: auditUrl }).eq('id', doc.id));
       if (status === 'completed' && doc.status !== 'completed') {
         const [client, project] = await Promise.all([row('clients', doc.client_id), row('projects', doc.project_id)]);
-        await notifyStudio('Document signed · ' + doc.title, `Client: ${client?.name || 'Unknown'} (${client?.email || 'No email'})\nProject: ${project?.title || 'Unknown'}\nDocument: ${doc.title}\n\nOpen ${e.SITE_URL || 'your website'}/admin to view the signed document.`, 'studio-signature-' + doc.id);
+        let attachment: { filename: string; path: string }[] | undefined;
+        if (completedUrl) {
+          const host = new URL(completedUrl).hostname;
+          if (['docuseal.com', 'docuseal.eu'].some(domain => host === domain || host.endsWith('.' + domain))) {
+            attachment = [{ filename: (String(doc.title).replace(/\.pdf$/i, '').replace(/[^a-z0-9._-]/gi, '-').slice(0, 80) || 'signed-agreement') + '.pdf', path: completedUrl }];
+          }
+        }
+        await notifyStudio('Document signed · ' + doc.title, `Client: ${client?.name || 'Unknown'} (${client?.email || 'No email'})\nProject: ${project?.title || 'Unknown'}\nDocument: ${doc.title}\nSigned PDF: ${completedUrl || 'Open the studio dashboard'}\nAudit record: ${auditUrl || 'Open the studio dashboard'}\n\nOpen ${e.SITE_URL || 'your website'}/admin to view the signed document.`, 'studio-signature-' + doc.id, attachment);
       }
       return json({ ok: true });
     }

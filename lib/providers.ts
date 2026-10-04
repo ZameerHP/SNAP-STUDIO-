@@ -10,14 +10,16 @@ async function providerMessage(response: Response) {
   }
 }
 
-export async function sendEmail(to: string, subject: string, text: string, id: string) {
+type EmailAttachment = { filename: string; path: string };
+
+export async function sendEmail(to: string, subject: string, text: string, id: string, attachments?: EmailAttachment[]) {
   if (!integrations().email) throw new HttpError('Email is awaiting connection. Configure a verified sender and Resend API key.', 503);
   const e = config();
   const ownerCopy = e.STUDIO_NOTIFICATION_EMAIL?.trim();
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + e.RESEND_API_KEY, 'Content-Type': 'application/json', 'Idempotency-Key': id },
-    body: JSON.stringify({ from: e.EMAIL_FROM, to: [to], bcc: ownerCopy && ownerCopy.toLowerCase() !== to.toLowerCase() ? [ownerCopy] : undefined, reply_to: 'supersnapstudio@gmail.com', subject, text }),
+    body: JSON.stringify({ from: e.EMAIL_FROM, to: [to], bcc: ownerCopy && ownerCopy.toLowerCase() !== to.toLowerCase() ? [ownerCopy] : undefined, reply_to: 'supersnapstudio@gmail.com', subject, text, attachments }),
   });
   if (!response.ok) {
     const detail = await providerMessage(response);
@@ -27,13 +29,20 @@ export async function sendEmail(to: string, subject: string, text: string, id: s
 }
 
 /** Owner alerts should not undo a saved enquiry, message, payment, or signature. */
-export async function notifyStudio(subject: string, text: string, id: string) {
+export async function notifyStudio(subject: string, text: string, id: string, attachments?: EmailAttachment[]) {
   const to = config().STUDIO_NOTIFICATION_EMAIL;
   if (!to || !integrations().email) return;
   try {
-    await sendEmail(to, subject, text, id);
+    await sendEmail(to, subject, text, id, attachments);
   } catch (error) {
     console.error('Studio email notification failed', error instanceof Error ? error.message : 'Unknown provider error');
+    if (attachments?.length) {
+      try {
+        await sendEmail(to, subject, text, id + '-link');
+      } catch (fallbackError) {
+        console.error('Studio email link fallback failed', fallbackError instanceof Error ? fallbackError.message : 'Unknown provider error');
+      }
+    }
   }
 }
 
@@ -47,7 +56,7 @@ export async function requestSignature(templateId: number, email: string, name: 
   if (!response.ok) {
     const detail = await providerMessage(response);
     if (response.status === 401 || response.status === 403 || /not authenticated/i.test(detail)) {
-      throw new HttpError('DocuSeal rejected the API key. Copy the key from the same account and Test Mode as the template, update DOCUSEAL_API_KEY in Vercel Production, then redeploy.', 502);
+      throw new HttpError('DocuSeal rejected the API key. For real signing, copy the Production API key from the same DocuSeal account and region as the template, update DOCUSEAL_API_KEY in Vercel Production, then redeploy.', 502);
     }
     throw new HttpError(`DocuSeal could not create the request (${response.status}). Check the template ID and exact signer role.${detail ? ` ${detail}` : ''}`, 502);
   }
