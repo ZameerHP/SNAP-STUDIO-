@@ -27,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
     if (action === 'signup') {
       const { error } = await auth.auth.signUp({ email: mail, password: input.password, options: { emailRedirectTo: origin + '/auth/callback?next=/client' } });
       if (error) throw new HttpError('Unable to create an account. Try signing in or contact the studio.', error.status === 429 ? 429 : 400);
-      return json({ ok: true, message: 'Check your email to confirm your account, then sign in. Galleries appear once the studio assigns them.' });
+      return json({ ok: true, message: 'Check your email and confirm your account. If the confirmation opens in a different browser, return here and sign in once with the same password. Your galleries appear once the studio assigns them.' });
     }
     const { data, error } = await auth.auth.signInWithPassword({ email: mail, password: input.password });
     if (error || !data.user?.email_confirmed_at) throw new HttpError('Email or password is incorrect, or your email still needs confirmation.', error?.status === 429 ? 429 : 401);
