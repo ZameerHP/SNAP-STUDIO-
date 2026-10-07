@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-type Mode = 'login' | 'signup' | 'recover' | 'password';
+type Mode = 'login' | 'signup' | 'recover' | 'resend' | 'password';
 export default function AuthForm({ mode: initial = 'login', next = '', configured = true, initialMessage = '', allowSignup = true }: { mode?: Mode; next?: string; configured?: boolean; initialMessage?: string; allowSignup?: boolean }) {
   const [mode, setMode] = useState<Mode>(initial), [busy, setBusy] = useState(false), [message, setMessage] = useState(initialMessage);
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -16,9 +16,9 @@ export default function AuthForm({ mode: initial = 'login', next = '', configure
   return <><form className="auth-form" onSubmit={submit}>
     {!configured && <p role="alert">Sign-in is awaiting setup. Please contact the studio.</p>}
     {mode !== 'password' && <label>Email address<input name="email" type="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" /></label>}
-    {mode !== 'recover' && <label>{mode === 'password' ? 'New password' : 'Password'}<input name="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'login' ? 1 : 12} maxLength={128} required /></label>}
+    {!['recover','resend'].includes(mode) && <label>{mode === 'password' ? 'New password' : 'Password'}<input name="password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={mode === 'login' ? 1 : 12} maxLength={128} required /></label>}
     {['signup','password'].includes(mode) && <label>Confirm password<input name="confirm" type="password" autoComplete="new-password" minLength={12} maxLength={128} required /><span className="fine">Use at least 12 characters.</span></label>}
     {message && <p className="auth-message" role="status">{message}</p>}
-    <button className="pill gold-pill" disabled={busy || !configured}>{busy ? 'Please wait…' : ({ login: 'Sign in', signup: 'Create account', recover: 'Send reset link', password: 'Save new password' })[mode]} ↗</button>
-  </form>{initial === 'login' && <div className="auth-links">{allowSignup && <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); }}>{mode === 'login' ? 'New client? Create account' : 'Already have an account? Sign in'}</button>}<a href="/recover">Forgot password?</a></div>}</>;
+    <button className="pill gold-pill" disabled={busy || !configured}>{busy ? 'Please wait…' : ({ login: 'Sign in', signup: 'Create account', recover: 'Send reset link', resend: 'Resend confirmation', password: 'Save new password' })[mode]} ↗</button>
+  </form>{initial === 'login' && <div className="auth-links">{allowSignup && <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setMessage(''); }}>{mode === 'login' ? 'New client? Create account' : 'Already have an account? Sign in'}</button>}<button type="button" onClick={() => { setMode('resend'); setMessage(''); }}>Didn&apos;t get the confirmation email? Resend</button><a href="/recover">Forgot password?</a></div>}</>;
 }
