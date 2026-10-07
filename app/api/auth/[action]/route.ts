@@ -14,6 +14,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ action:
       if (error) throw new HttpError('Password reset is unavailable. Please contact the studio.', 503);
       return json({ ok: true, message: 'If this account exists, a password-reset email will arrive shortly.' });
     }
+    if (action === 'resend') {
+      const { error } = await auth.auth.resend({
+        type: 'signup',
+        email: email(input.email),
+        options: { emailRedirectTo: origin + '/auth/callback?next=/client' },
+      });
+      if (error && error.status === 429) throw new HttpError('Please wait a minute before requesting another confirmation email.', 429);
+      if (error) throw new HttpError('Confirmation email could not be sent. Please contact the studio.', 503);
+      return json({ ok: true, message: 'If this account still needs confirmation, a new email has been sent. Check inbox and spam.' });
+    }
     if (!['login', 'signup', 'password'].includes(action)) throw new HttpError('Action not found.', 404);
     if (typeof input.password !== 'string' || input.password.length > 128 || input.password.length < (action === 'login' ? 1 : 12)) throw new HttpError('Use a password with at least 12 characters.');
     if (action === 'password') {
