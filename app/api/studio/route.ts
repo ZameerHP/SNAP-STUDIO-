@@ -139,13 +139,41 @@ export async function POST(req: Request) {
       const title = str(d.title, 180), sent = await requestSignature(integer(d.templateId, 1), c.email, c.name, resource, str(d.signerRole || 'First Party', 120));
       await result(db().from('documents').insert({ id: resource, project_id: p.id, client_id: p.client_id, title, provider_id: String(sent.submission_id), sign_url: sent.embed_src || ('https://docuseal.com/s/' + sent.slug), status: 'sent', created_at: now() }));
     } else if (action === 'settings') {
-      const settings = [];
-      for (const key of ['studioStatement','aboutText','contactEmail','contactPhone','instagram','facebook','videoUrl']) if (d[key] !== undefined) {
-        let value = str(d[key], 4000, false);
-        if (['instagram','facebook','videoUrl'].includes(key) && value) { let u; try { u = new URL(value); } catch { throw new HttpError('Enter a valid HTTPS link.'); } if (u.protocol !== 'https:') throw new HttpError('Use HTTPS links.'); }
-        if (key === 'contactEmail') value = email(value); settings.push({ key, value });
+      const imageKeys = ['logoImage','heroImage','photographyImage','videographyImage','liveStreamingImage','passportPhotosImage','filmImage','studioImage','studioImageSecondary','aboutImage'];
+      const allowedKeys = ['studioStatement','aboutText','contactEmail','contactPhone','instagram','facebook','videoUrl', ...imageKeys, 'portfolioOrder'];
+      const settings: Row[] = [];
+      let portfolioIds: string[] | null = null;
+      for (const key of allowedKeys) if (d[key] !== undefined) {
+        let value = str(d[key], key === 'portfolioOrder' ? 22000 : imageKeys.includes(key) ? 100 : 4000, false);
+        if (['instagram','facebook','videoUrl'].includes(key) && value) {
+          let u: URL;
+          try { u = new URL(value); } catch { throw new HttpError('Enter a valid HTTPS link.'); }
+          if (u.protocol !== 'https:') throw new HttpError('Use HTTPS links.');
+        }
+        if (key === 'contactEmail' && value) value = email(value);
+        if (key === 'portfolioOrder') {
+          try {
+            const parsed: unknown = JSON.parse(value || '[]');
+            if (!Array.isArray(parsed) || parsed.length > 500 || parsed.some(id => typeof id !== 'string' || !id.trim()) || new Set(parsed).size !== parsed.length) throw new Error('invalid');
+            portfolioIds = parsed as string[];
+            value = JSON.stringify(portfolioIds);
+          } catch { throw new HttpError('Portfolio order must be a valid list of public project IDs.'); }
+        }
+        settings.push({ key, value });
       }
-      if (settings.length) await result(db().from('settings').upsert(settings)); resource = 'website';
+      const imageIds = [...new Set(settings.filter(s => imageKeys.includes(s.key) && s.value).map(s => s.value as string))];
+      const selectedMedia = imageIds.length ? await result<Row[]>(db().from('media').select('id,project_id,type').in('id', imageIds)) : [];
+      if (selectedMedia.length !== imageIds.length || selectedMedia.some(m => !String(m.type).startsWith('image/'))) {
+        throw new HttpError('Choose valid uploaded image files for website imagery.');
+      }
+      const referencedProjectIds = [...new Set([...selectedMedia.map(m => String(m.project_id)), ...(portfolioIds || [])])];
+      const referencedProjects = referencedProjectIds.length ? await result<Row[]>(db().from('projects').select('id,published').in('id', referencedProjectIds)) : [];
+      const publicIds = new Set(referencedProjects.filter(p => Number(p.published) === 1).map(p => String(p.id)));
+      if (referencedProjectIds.some(id => !publicIds.has(id))) {
+        throw new HttpError('Website images and portfolio order can only use projects published to the public portfolio. Publish the source project first.');
+      }
+      if (settings.length) await result(db().from('settings').upsert(settings));
+      resource = 'website';
     } else throw new HttpError('Unknown action.');
     await log(w.user.userId, action, resource); return json({ ok: true, id: resource });
   } catch (e) { return failure(e); }
