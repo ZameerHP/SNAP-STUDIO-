@@ -115,7 +115,19 @@ export async function POST(req: Request) {
       const service = str(d.service, 80), status = str(d.status || 'planning', 30);
       if (!['Photography','Videography','Live Streaming','Passport Photos'].includes(service) || !['planning','scheduled','editing','delivered'].includes(status)) throw new HttpError('Invalid service or stage.');
       const values = { title: str(d.title, 180), description: str(d.description || '', 4000, false), service, date: str(d.date || '', 20, false), status, download_allowed: d.downloadAllowed ? 1 : 0, published: d.published ? 1 : 0 };
-      if (d.id) { resource = str(d.id, 100); const previous = await row('projects', resource); if (!previous) throw new HttpError('Project not found.', 404); if (previous.client_id !== c.id) throw new HttpError('Create a separate project to assign work to another client.'); await result(db().from('projects').update(values).eq('id', resource)); }
+      if (d.id) {
+        resource = str(d.id, 100);
+        const previous = await row('projects', resource);
+        if (!previous) throw new HttpError('Project not found.', 404);
+        if (previous.client_id !== c.id) throw new HttpError('Create a separate project to assign work to another client.');
+        const coverId = str(d.coverId || '', 100, false);
+        if (coverId) {
+          const cover = await row('media', coverId);
+          if (!cover || cover.project_id !== resource || !String(cover.type || '').startsWith('image/')) throw new HttpError('Choose an image uploaded to this project as its cover.');
+          values.cover_id = coverId;
+        } else values.cover_id = null;
+        await result(db().from('projects').update(values).eq('id', resource));
+      }
       else await result(db().from('projects').insert({ ...values, id: resource, client_id: c.id, created_at: now() }));
     } else if (action === 'enquiry') {
       resource = str(d.id, 100); if (!['new','contacted','booked','closed'].includes(d.status)) throw new HttpError('Invalid status.'); await result(db().from('enquiries').update({ status: d.status }).eq('id', resource));
