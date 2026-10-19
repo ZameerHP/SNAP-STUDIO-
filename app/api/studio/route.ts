@@ -108,8 +108,11 @@ export async function POST(req: Request) {
       const table = tables[kind], target = await row(table, id);
       if (!target) throw new HttpError('This item no longer exists. Refresh the page.', 404);
       const has = async (name:string, column:string, value:string) => (await result<Row[]>(db().from(name).select('id').eq(column,value).limit(1))).length > 0;
-      if (kind === 'client' && (await has('projects','client_id',id) || await has('invoices','client_id',id) || await has('documents','client_id',id) || await has('messages','client_id',id))) throw new HttpError('Delete this client’s projects, invoices, documents and messages first.', 409);
-      if (kind === 'project' && (await has('media','project_id',id) || await has('invoices','project_id',id) || await has('documents','project_id',id) || await has('messages','project_id',id))) throw new HttpError('Delete this project’s photos, invoices, documents and messages first.', 409);
+      if (kind === 'client' && (await has('projects','client_id',id) || await has('invoices','client_id',id) || await has('documents','client_id',id) || await has('messages','client_id',id))) throw new HttpError('This client still has projects, invoices, documents or messages. Remove the linked records first; paid invoices are retained for financial records.', 409);
+      if (kind === 'project') {
+        const linkedInvoices = await result<Row[]>(db().from('invoices').select('id').eq('project_id', id));
+        for (const invoice of linkedInvoices) await removeUnpaidProjectInvoice(String(invoice.id));
+      }
       if (kind === 'invoice') {
         // Serialize against new checkout creation; the payment FK also prevents a late webhook
         // from silently deleting a financial record after the final payment check.
@@ -153,12 +156,25 @@ export async function POST(req: Request) {
       }
       if (kind === 'client') await result(db().from('favorites').delete().eq('client_id',id));
       if (kind === 'project') {
-        const pending = await result<Row[]>(db().from('uploads_pending').select('id,key').eq('project_id',id));
-        if (pending.length) {
-          const { error } = await db().storage.from(MEDIA_BUCKET).remove(pending.map(p=>p.key));
-          if (error) throw new HttpError('Could not remove an unfinished upload. Retry the project deletion.',503);
-          await result(db().from('uploads_pending').delete().eq('project_id',id));
+        // Delete dependent records before the project. Paid/refunded invoices were
+        // refused by removeUnpaidProjectInvoice above and are never cascade-deleted.
+        const [projectMedia, pending, docs, projectMessages] = await Promise.all([
+          result<Row[]>(db().from('media').select('id,key').eq('project_id', id)),
+          result<Row[]>(db().from('uploads_pending').select('id,key').eq('project_id', id)),
+          result<Row[]>(db().from('documents').select('id').eq('project_id', id)),
+          result<Row[]>(db().from('messages').select('id').eq('project_id', id)),
+        ]);
+        const keys = [...projectMedia.map(m => String(m.key)), ...pending.map(p => String(p.key))];
+        for (let offset = 0; offset < keys.length; offset += 100) {
+          const { error } = await db().storage.from(MEDIA_BUCKET).remove(keys.slice(offset, offset + 100));
+          if (error) throw new HttpError('Could not remove all project photos/videos from storage. The project record was kept; retry the deletion.', 503);
         }
+        const mediaIds = projectMedia.map(m => String(m.id));
+        if (mediaIds.length) await result(db().from('favorites').delete().in('media_id', mediaIds));
+        if (docs.length) await result(db().from('documents').delete().eq('project_id', id));
+        if (projectMessages.length) await result(db().from('messages').delete().eq('project_id', id));
+        if (projectMedia.length) await result(db().from('media').delete().eq('project_id', id));
+        if (pending.length) await result(db().from('uploads_pending').delete().eq('project_id', id));
       }
       await result(db().from(table).delete().eq('id',id));
       await log(w.user.userId, 'delete_' + kind, id);
