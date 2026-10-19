@@ -2,6 +2,63 @@ import { body, db, email, failure, HttpError, identity, integer, integrations, j
 import { sendEmail, requestSignature, notifyStudio } from '@/lib/providers';
 import { MEDIA_BUCKET } from '@/lib/supabase/admin';
 import { reconcileSquarePayment, restoreSquareLink, square } from '@/lib/square';
+
+/**
+ * Remove an unpaid invoice only after serializing against checkout creation and
+ * verifying/canceling its Square checkout. Any payment/refund history is retained.
+ */
+async function removeUnpaidProjectInvoice(invoiceId: string) {
+  const lock = uid();
+  const acquired = await result<boolean>(db().rpc('studio_acquire_checkout', {
+    p_invoice: invoiceId, p_lock: lock, p_now: now(), p_expires: now() + 120000,
+  }));
+  if (!acquired) throw new HttpError('An invoice checkout is being prepared. Retry deleting the project shortly.', 409);
+  try {
+    const hasPayments = async () => (await result<Row[]>(
+      db().from('payments').select('id').eq('invoice_id', invoiceId).limit(1)
+    )).length > 0;
+    if (await hasPayments()) {
+      throw new HttpError('This project has an invoice with payment/refund history. Keep the invoice and project for financial records.', 409);
+    }
+    const attempts = await result<Row[]>(
+      db().from('square_checkouts').select('*').eq('invoice_id', invoiceId).order('created_at')
+    );
+    for (let attempt of attempts) {
+      if (attempt.status === 'paid') {
+        throw new HttpError('Square has marked a project invoice as paid. Keep it and its project for financial records.', 409);
+      }
+      if (attempt.status === 'creating' && !attempt.link_id) attempt = await restoreSquareLink(attempt);
+      if (attempt.order_id) {
+        const { order } = await square('orders/' + encodeURIComponent(attempt.order_id));
+        if (!order) throw new HttpError('Could not verify the Square order for this invoice. Retry later.', 502);
+        for (const tender of order.tenders || []) {
+          const payment = await reconcileSquarePayment(tender.payment_id || tender.id);
+          if (payment && (payment.completed || ['APPROVED', 'PENDING'].includes(payment.status))) {
+            throw new HttpError('Square has a paid or pending payment for this invoice. Keep the project and invoice.', 409);
+          }
+        }
+        if (order.state === 'COMPLETED') {
+          throw new HttpError('Square completed this invoice order. Keep the project and invoice for financial records.', 409);
+        }
+        if (order.state !== 'CANCELED' && attempt.link_id) {
+          await square('online-checkout/payment-links/' + encodeURIComponent(attempt.link_id), 'DELETE');
+        } else if (order.state !== 'CANCELED') {
+          throw new HttpError('Could not safely cancel this Square checkout. Retry later.', 409);
+        }
+      } else if (attempt.link_id) {
+        throw new HttpError('A Square checkout is missing its order. The project was kept; check the payment before retrying.', 409);
+      }
+    }
+    if (await hasPayments()) {
+      throw new HttpError('A payment arrived while deleting this invoice. The project and invoice were kept.', 409);
+    }
+    await result(db().from('square_checkouts').delete().eq('invoice_id', invoiceId));
+    await result(db().from('invoices').delete().eq('id', invoiceId));
+  } finally {
+    await result(db().from('invoices').update({ checkout_lock: null }).eq('id', invoiceId).eq('checkout_lock', lock)).catch(() => {});
+  }
+}
+
 export async function GET() {
   try {
     const w = await identity(), cid = w.client?.id || 'unassigned';
